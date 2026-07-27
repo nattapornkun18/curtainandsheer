@@ -336,7 +336,7 @@
       <div id="recs"></div>
       <button id="clr" style="width:100%;margin-top:14px;padding:10px;border:1px solid var(--line);
         background:none;border-radius:9px;color:var(--mute);font-family:var(--sans);font-size:12px;cursor:pointer">
-        ล้างข้อมูลทั้งหมด</button>
+        ล้างข้อมูลในเครื่องนี้ (ชีตไม่ถูกแตะ)</button>
     </div>
   </div>
 </div>
@@ -507,7 +507,11 @@ async function flush(){
   flushing = true; setSync("busy");
   try{
     while(outbox.length){
-      await apiPost(outbox[0]);
+      try{ await apiPost(outbox[0]); }
+      catch(e){
+        if(!/unknown action/.test(String(e.message||e))) throw e;
+        // สคริปต์ฝั่งชีตไม่รู้จักคำสั่งนี้ (เวอร์ชันเก่าค้างในคิว) — ทิ้งไปไม่ต้องวน
+      }
       outbox.shift(); saveOutbox();
     }
     setSync("ok");
@@ -534,22 +538,17 @@ async function pull(force){
   }finally{ pulling = false; }
 }
 
-/* รวมข้อมูลจากชีตเข้ากับเครื่อง: ใครแก้ทีหลังชนะ, ของที่ยังค้างในคิวชนะเสมอ */
+/* รวมข้อมูลจากชีตเข้ากับเครื่อง — ชีตคือแหล่งข้อมูลจริง
+   ยกเว้นห้องที่เพิ่งบันทึกแล้วยังส่งขึ้นไม่สำเร็จ อันนั้นของในเครื่องชนะไว้ก่อน */
 function mergeRemote(remote){
   const before = JSON.stringify(records);
-  const map = new Map(records.map(r=>[r.room, r]));
-  const seen = new Set();
-  remote.forEach(rr=>{
-    if(!rr || !rr.room) return;
-    seen.add(rr.room);
-    const cur = map.get(rr.room);
-    if(!cur || (rr.updatedAt||0) >= (cur.updatedAt||0)) map.set(rr.room, Object.assign({}, rr, {synced:true}));
-  });
-  [...map.keys()].forEach(k=>{ if(map.get(k).synced && !seen.has(k)) map.delete(k); });
-  outbox.forEach(op=>{
+  const map = new Map();
+  remote.forEach(rr=>{ if(rr && rr.room) map.set(rr.room, Object.assign({}, rr, {synced:true})); });
+  // ห้องที่ยังไม่เคยขึ้นชีตเลย เก็บไว้ก่อน (ห้องที่ขึ้นไปแล้วให้ยึดตามชีต)
+  records.forEach(r=>{ if(!r.synced && !map.has(r.room)) map.set(r.room, r); });
+  outbox.forEach(op=>{                                            // ของที่ยังค้างในคิวชนะเสมอ
     if(op.action==="upsert") (op.records||[]).forEach(r=>map.set(r.room, r));
     else if(op.action==="delete") map.delete(op.room);
-    else if(op.action==="clear") map.clear();
   });
   records = [...map.values()].sort((a,b)=>a.room-b.room);
   return JSON.stringify(records) !== before;
@@ -802,8 +801,10 @@ document.getElementById("cp").onclick = async ()=>{
   catch(e){ toast("คัดลอกไม่สำเร็จ ใช้ปุ่มดาวน์โหลด CSV แทน"); }
 };
 document.getElementById("clr").onclick = ()=>{
-  if(!confirm(cfg.url ? "ลบข้อมูลทั้งหมด (ทั้งในเครื่องและในชีต)?" : "ลบข้อมูลที่บันทึกไว้ทั้งหมด?")) return;
-  records = []; persist(); queue({action:"clear"}); loadRoom(); toast("ล้างข้อมูลแล้ว");
+  if(!confirm(cfg.url ? "ล้างข้อมูลในเครื่องนี้?\n(ข้อมูลในชีตยังอยู่ครบ — กด “ดึงจากชีต” เอากลับมาได้)"
+                      : "ลบข้อมูลที่บันทึกไว้ทั้งหมด?")) return;
+  records = []; persist(); loadRoom();
+  toast(cfg.url ? "ล้างในเครื่องแล้ว — ชีตไม่ถูกแตะ" : "ล้างข้อมูลแล้ว");
 };
 document.getElementById("push").onclick = ()=>{
   if(!cfg.url) return openCfg();

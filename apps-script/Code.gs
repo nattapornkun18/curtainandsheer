@@ -1,6 +1,9 @@
 /**
  * Curtain & Sheer — Google Sheet API
- * ตัวกลางระหว่างหน้า index.html (GitHub Pages) กับชีตฐานข้อมูล
+ * ตัวกลางระหว่างหน้า index.html (GitHub Pages) กับชีตฐานข้อมูลเดิม
+ *
+ * เขียนลง "แท็บเดิม" ที่มีข้อมูลอยู่แล้วเท่านั้น — ไม่สร้างแท็บใหม่
+ * ห้องเดิมของวันเดิม = ทับแถวเดิม | ห้องใหม่หรือวันใหม่ = ต่อท้ายเป็นแถวใหม่
  *
  * ติดตั้ง:  เปิดชีต → Extensions → Apps Script → วางไฟล์นี้ทับ Code.gs
  *          → Deploy → New deployment → Web app
@@ -8,17 +11,18 @@
  *          → คัดลอก URL ที่ลงท้ายด้วย /exec ไปใส่ในแอป (ปุ่ม “เชื่อมชีต”)
  *
  * วิธีคุยกัน:
- *   GET  ?action=ping                 → เช็คว่าเชื่อมได้ไหม
- *   GET  ?action=list                 → คืนข้อมูลทุกห้องเป็น JSON
- *   POST {action:"upsert", records:[…]}  → เขียน/อัปเดตห้อง (คีย์ = วันที่ + เลขห้อง)
- *   POST {action:"delete", room:301}     → ลบห้องนั้น
- *   POST {action:"clear"}                → ล้างข้อมูลทั้งหมด (เหลือหัวตาราง)
+ *   GET  ?action=ping                    → เช็คว่าเชื่อมได้ไหม + บอกว่าเจอแท็บไหน
+ *   GET  ?action=list                    → คืนข้อมูลทุกห้องเป็น JSON (ห้องละรายการล่าสุด)
+ *   POST {action:"upsert", records:[…]}  → เขียน/อัปเดตห้อง
+ *   POST {action:"delete", room:301}     → ลบแถวของห้องนั้น (แอปไม่เรียกเอง ต้องยิงเอง)
  *   ทุก request ใส่ token ด้วยถ้าตั้ง TOKEN ไว้
  */
 
 /** ว่างไว้ = ใช้ชีตที่สคริปต์ผูกอยู่ */
-var SHEET_ID   = '1YG-HCGAEmsliXe0eReUI52Tdl1bDdPhBwex24DRptl0';
-var SHEET_NAME = 'Curtain Check';
+var SHEET_ID = '1YG-HCGAEmsliXe0eReUI52Tdl1bDdPhBwex24DRptl0';
+
+/** ★ ชื่อแท็บที่มีข้อมูลจริง — ต้องตรงกับชื่อแท็บล่างสุดของชีต */
+var SHEET_NAME = 'Check ม่าน';
 
 /** ตั้งเป็นข้อความลับสักชุด แล้วใส่ค่าเดียวกันในช่อง Token ของแอป
  *  ถ้าเว้นว่าง = ใครมี URL ก็เขียนได้ */
@@ -27,13 +31,16 @@ var TOKEN = '';
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
             'manualSheer','manualCurtain','soundSheer','soundCurtain','smooth'];
 
+/** คอลัมน์ A–S ตามตารางเดิม — คอลัมน์ถัดจากนี้ (เช่น “สถานะ”) แอปไม่แตะ */
+var WIDTH = 19;
+var COL = {DATE:0, FLOOR:1, ROOM:2, TYPE:3, BRAND:4, CHECK0:5, RESULT:16, NOTE:17, BY:18};
+
+/** ใช้เฉพาะตอนเจอชีตเปล่าสนิทเท่านั้น (ปกติไม่ถูกใช้) */
 var HEAD = ['วันที่ตรวจ','ชั้น','Room No.','Room type','Brand',
             'close sheer','close curtain','open sheer','open curtain',
             'switch sheer','switch curtain','manual sheer','manual curtain',
             'sound sheer','sound curtain','smooth all',
-            'ผลตรวจ','รายละเอียด defect / หมายเหตุ','ผู้ตรวจ','อัปเดตล่าสุด'];
-
-var COL = {DATE:0, FLOOR:1, ROOM:2, TYPE:3, BRAND:4, CHECK0:5, RESULT:16, NOTE:17, BY:18, UPD:19};
+            'ผลตรวจ','รายละเอียด defect / หมายเหตุ','ผู้ตรวจ'];
 
 /* ============================ entry points ============================ */
 
@@ -42,7 +49,11 @@ function doGet(e) {
   try {
     guard(p.token);
     switch (p.action || 'list') {
-      case 'ping': return json({ok:true, sheet:sheet().getName(), count:Math.max(0, sheet().getLastRow()-1), ts:Date.now()});
+      case 'ping': {
+        var sh = sheet(), lay = layout(sh);
+        return json({ok:true, sheet:sh.getName(),
+                     count:Math.max(0, sh.getLastRow() - lay.start + 1), ts:Date.now()});
+      }
       case 'list': return json({ok:true, records:readAll(), ts:Date.now()});
       default:     return json({ok:false, error:'unknown action: ' + p.action});
     }
@@ -65,7 +76,6 @@ function doPost(e) {
     switch (body.action) {
       case 'upsert': return json({ok:true, written:upsert(body.records || (body.record ? [body.record] : [])), ts:Date.now()});
       case 'delete': return json({ok:true, deleted:remove(body.room, body.date), ts:Date.now()});
-      case 'clear':  return json({ok:true, cleared:clearAll(), ts:Date.now()});
       default:       return json({ok:false, error:'unknown action: ' + body.action});
     }
   } catch (err) {
@@ -90,24 +100,45 @@ function book() {
   return SHEET_ID ? SpreadsheetApp.openById(SHEET_ID) : SpreadsheetApp.getActive();
 }
 
-/** คืนชีตงาน สร้างใหม่พร้อมหัวตารางถ้ายังไม่มี */
+/** หาแท็บเดิมให้เจอ — ไม่เจอก็ฟ้อง ไม่สร้างใหม่เด็ดขาด */
 function sheet() {
-  var ss = book();
-  var sh = ss.getSheetByName(SHEET_NAME);
-  if (!sh) {
-    // ถ้าชีตแรกยังว่างเปล่า ใช้ชีตนั้นเลยแทนการสร้างใหม่
-    var first = ss.getSheets()[0];
-    sh = (ss.getSheets().length === 1 && first.getLastRow() === 0) ? first.setName(SHEET_NAME)
-                                                                  : ss.insertSheet(SHEET_NAME);
-  }
-  if (sh.getLastRow() === 0) {
-    sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD])
-      .setFontWeight('bold').setBackground('#141C28').setFontColor('#FFFFFF');
+  var all = book().getSheets();
+  var squash = function (s) { return String(s).replace(/\s+/g, '').toLowerCase(); };
+  var i;
+  for (i = 0; i < all.length; i++) if (all[i].getName().trim() === SHEET_NAME.trim()) return all[i];
+  for (i = 0; i < all.length; i++) if (squash(all[i].getName()) === squash(SHEET_NAME)) return all[i];
+  throw new Error('ไม่พบแท็บชื่อ "' + SHEET_NAME + '" — แท็บที่มีอยู่: ' +
+                  all.map(function (s) { return s.getName(); }).join(' / '));
+}
+
+/**
+ * หาว่าหัวตารางกินกี่แถว และข้อมูลเริ่มแถวไหน
+ * รองรับทั้งหัวแถวเดียว และหัวสองแถว (แถวบน = กลุ่ม CLOSE/OPEN/…, แถวล่าง = sheer/curtain)
+ */
+function layout(sh) {
+  var last = sh.getLastRow();
+  if (last === 0) {                                     // ชีตเปล่าสนิท — วางหัวตารางให้ครั้งเดียว
+    sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD]).setFontWeight('bold');
     sh.setFrozenRows(1);
-    sh.getRange(2, COL.DATE + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');   // วันที่เก็บเป็นข้อความ
-    sh.setColumnWidth(COL.NOTE + 1, 260);
+    return {header:1, start:2};
   }
-  return sh;
+  var probe = sh.getRange(1, 1, Math.min(12, last), WIDTH).getValues();
+  var hdr = 0, i;
+  for (i = 0; i < probe.length; i++) {
+    var joined = probe[i].join('|');
+    if (joined.indexOf('Room') >= 0 && joined.indexOf('Brand') >= 0) { hdr = i + 1; break; }
+  }
+  if (!hdr) {                                           // ไม่เจอหัวตาราง เดาจากแถวแรกที่มีเลขห้อง
+    for (i = 0; i < probe.length; i++) if (Number(probe[i][COL.ROOM])) return {header:i, start:i + 1};
+    return {header:1, start:2};
+  }
+  var start = hdr + 1;
+  var next = probe[hdr] || [];                          // แถวถัดจากหัวตาราง
+  var nextTxt = next.join('|').toLowerCase();
+  var isSub = !Number(next[COL.ROOM]) &&
+              (nextTxt.indexOf('sheer') >= 0 || nextTxt.indexOf('curtain') >= 0);
+  if (isSub) start = hdr + 2;                           // หัวสองแถว
+  return {header:hdr, start:start};
 }
 
 /** วันที่อาจถูก Sheets แปลงเป็น Date เอง — ดึงกลับมาเป็น dd/MM/yyyy เสมอ */
@@ -118,13 +149,18 @@ function normDate(v) {
 
 function keyOf(date, room) { return normDate(date) + '|' + String(room).trim(); }
 
+/** dd/MM/yyyy → 20260723 ไว้เทียบว่าแถวไหนใหม่กว่า */
+function dateRank(v) {
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(normDate(v));
+  return m ? Number(m[3]) * 10000 + Number(m[2]) * 100 + Number(m[1]) : 0;
+}
+
 function rowToRecord(row) {
   var checks = {};
   KEYS.forEach(function (k, i) {
     var v = row[COL.CHECK0 + i];
-    if (v !== '' && v !== null && v !== undefined) checks[k] = String(v);
+    if (v !== '' && v !== null && v !== undefined) checks[k] = String(v).trim();
   });
-  var upd = row[COL.UPD];
   return {
     date:   normDate(row[COL.DATE]),
     floor:  Number(row[COL.FLOOR]) || Math.floor(Number(row[COL.ROOM]) / 100),
@@ -134,13 +170,13 @@ function rowToRecord(row) {
     checks: checks,
     result: String(row[COL.RESULT] || ''),
     note:   String(row[COL.NOTE] || ''),
-    by:     String(row[COL.BY] || ''),
-    updatedAt: upd instanceof Date ? upd.getTime() : (Number(upd) || 0)
+    by:     String(row[COL.BY] || '')
   };
 }
 
 function recordToRow(r) {
-  var row = new Array(HEAD.length).fill('');
+  var row = [];
+  for (var i = 0; i < WIDTH; i++) row.push('');
   row[COL.DATE]  = String(r.date || '');
   row[COL.FLOOR] = r.floor || Math.floor(Number(r.room) / 100);
   row[COL.ROOM]  = Number(r.room);
@@ -150,95 +186,130 @@ function recordToRow(r) {
   row[COL.RESULT] = r.result || '';
   row[COL.NOTE]   = r.note || '';
   row[COL.BY]     = r.by || '';
-  row[COL.UPD]    = Number(r.updatedAt) || Date.now();
   return row;
 }
 
-/** อ่านทุกแถว แล้วเหลือห้องละรายการล่าสุด (แอปเก็บห้องละรายการ ชีตเก็บย้อนหลังได้) */
+/** อ่านทุกแถว เหลือห้องละรายการล่าสุด (ดูจากวันที่ ถ้าวันเท่ากันเอาแถวล่างสุด) */
 function readAll() {
-  var sh = sheet();
-  if (sh.getLastRow() < 2) return [];
-  var values = sh.getRange(2, 1, sh.getLastRow() - 1, HEAD.length).getValues();
+  var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
+  if (last < lay.start) return [];
+  var values = sh.getRange(lay.start, 1, last - lay.start + 1, WIDTH).getValues();
   var latest = {};
-  values.forEach(function (row) {
-    if (!row[COL.ROOM]) return;
+  values.forEach(function (row, i) {
+    if (!Number(row[COL.ROOM])) return;
     var rec = rowToRecord(row);
+    rec.rank = dateRank(row[COL.DATE]) * 100000 + (lay.start + i);
     var cur = latest[rec.room];
-    if (!cur || rec.updatedAt >= cur.updatedAt) latest[rec.room] = rec;
+    if (!cur || rec.rank >= cur.rank) latest[rec.room] = rec;
   });
-  return Object.keys(latest).map(function (k) { return latest[k]; })
-               .sort(function (a, b) { return a.room - b.room; });
+  return Object.keys(latest).map(function (k) {
+    var r = latest[k]; delete r.rank; return r;
+  }).sort(function (a, b) { return a.room - b.room; });
 }
 
-/** เขียนทับแถวที่คีย์ตรงกัน ไม่ตรงก็ต่อท้าย */
+/** คอลัมน์ไหนเป็นสูตร (ดูจากแถวข้อมูลล่าสุด) — จะได้ไม่เขียนทับสูตรของเจ้าของชีต */
+function formulaCols(sh, templateRow) {
+  var flags = [];
+  for (var i = 0; i < WIDTH; i++) flags.push(false);
+  if (!templateRow) return flags;
+  var f = sh.getRange(templateRow, 1, 1, WIDTH).getFormulas()[0];
+  for (var j = 0; j < WIDTH; j++) flags[j] = !!f[j];
+  return flags;
+}
+
+/** ช่วงคอลัมน์ที่เขียนค่าได้ (ข้ามช่องที่เป็นสูตร) */
+function writableSegments(flags) {
+  var segs = [], s = -1, i;
+  for (i = 0; i < WIDTH; i++) {
+    if (!flags[i]) { if (s < 0) s = i; }
+    else if (s >= 0) { segs.push([s, i - s]); s = -1; }
+  }
+  if (s >= 0) segs.push([s, WIDTH - s]);
+  return segs;
+}
+
+function writeRow(sh, at, row, segs) {
+  segs.forEach(function (seg) {
+    sh.getRange(at, seg[0] + 1, 1, seg[1]).setValues([row.slice(seg[0], seg[0] + seg[1])]);
+  });
+}
+
+/** แถวใหม่ให้หน้าตาเหมือนแถวเดิม: สี, dropdown, และสูตรที่มีอยู่ */
+function stampTemplate(sh, from, to) {
+  var width = Math.max(WIDTH, sh.getLastColumn());
+  var src = sh.getRange(from, 1, 1, width), dst = sh.getRange(to, 1, 1, width);
+  src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  var f = src.getFormulasR1C1()[0];
+  f.forEach(function (x, i) { if (x) dst.offset(0, i, 1, 1).setFormulaR1C1(x); });
+}
+
+/** เขียนทับแถวที่ วันที่+เลขห้อง ตรงกัน ไม่ตรงก็ต่อท้ายเป็นแถวใหม่ */
 function upsert(recs) {
   if (!recs || !recs.length) return 0;
-  var sh = sheet();
-  var last = sh.getLastRow();
-  var index = {};
-  if (last >= 2) {
-    var keyCols = sh.getRange(2, 1, last - 1, COL.ROOM + 1).getValues();
-    keyCols.forEach(function (row, i) { index[keyOf(row[COL.DATE], row[COL.ROOM])] = i + 2; });
+  var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
+
+  var index = {}, lastData = 0;
+  if (last >= lay.start) {
+    var keys = sh.getRange(lay.start, 1, last - lay.start + 1, COL.ROOM + 1).getValues();
+    keys.forEach(function (row, i) {
+      if (!Number(row[COL.ROOM])) return;
+      index[keyOf(row[COL.DATE], row[COL.ROOM])] = lay.start + i;
+      lastData = lay.start + i;
+    });
   }
+
   // ยุบรายการซ้ำในชุดเดียวกัน เหลืออันที่ส่งมาทีหลังสุด
   var byKey = {}, order = [];
   recs.forEach(function (r) {
-    if (!r || !r.room) return;
+    if (!r || !Number(r.room)) return;
     var row = recordToRow(r);
     var k = keyOf(row[COL.DATE], row[COL.ROOM]);
     if (!byKey.hasOwnProperty(k)) order.push(k);
     byKey[k] = row;
   });
-  var appends = [];
+
+  var segs = writableSegments(formulaCols(sh, lastData));
+  var cursor = lastData || (lay.start - 1);
   order.forEach(function (k) {
     var at = index[k];
-    if (at) sh.getRange(at, 1, 1, HEAD.length).setValues([byKey[k]]);
-    else appends.push(byKey[k]);
+    if (!at) {
+      at = ++cursor;
+      if (lastData) stampTemplate(sh, lastData, at);
+    }
+    writeRow(sh, at, byKey[k], segs);
+    index[k] = at;
   });
-  if (appends.length) {
-    sh.getRange(last + 1, 1, appends.length, HEAD.length).setValues(appends);
-  }
   return order.length;
 }
 
 /** ลบห้อง — ระบุ date ด้วยเพื่อลบเฉพาะวันนั้น ไม่ระบุ = ลบทุกแถวของห้องนั้น */
 function remove(roomNo, date) {
-  var sh = sheet();
-  if (sh.getLastRow() < 2) return 0;
-  var values = sh.getRange(2, 1, sh.getLastRow() - 1, COL.ROOM + 1).getValues();
+  var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
+  if (last < lay.start) return 0;
+  var values = sh.getRange(lay.start, 1, last - lay.start + 1, COL.ROOM + 1).getValues();
   var kill = [];
   values.forEach(function (row, i) {
     if (Number(row[COL.ROOM]) !== Number(roomNo)) return;
     if (date && normDate(row[COL.DATE]) !== normDate(date)) return;
-    kill.push(i + 2);
+    kill.push(lay.start + i);
   });
   kill.reverse().forEach(function (r) { sh.deleteRow(r); });
   return kill.length;
 }
 
-function clearAll() {
-  var sh = sheet();
-  var n = sh.getLastRow() - 1;
-  if (n > 0) sh.getRange(2, 1, n, HEAD.length).clearContent();
-  return Math.max(0, n);
-}
-
-/* ============================ เมนูช่วยงานในชีต ============================ */
+/* ============================ เมนูช่วยเช็คในชีต ============================ */
 
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Curtain Check')
-    .addItem('จัดหัวตาราง / สร้างชีตงาน', 'setup')
-    .addItem('ลบข้อมูลทั้งหมด (เหลือหัวตาราง)', 'clearAll')
+    .addItem('เช็คว่าสคริปต์อ่านแท็บไหน', 'whereAmI')
     .addToUi();
 }
 
-function setup() {
-  var sh = sheet();
-  sh.getRange(1, 1, 1, HEAD.length).setValues([HEAD])
-    .setFontWeight('bold').setBackground('#141C28').setFontColor('#FFFFFF');
-  sh.setFrozenRows(1);
-  sh.getRange(2, COL.DATE + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
-  sh.setColumnWidth(COL.NOTE + 1, 260);
-  SpreadsheetApp.getActive().toast('พร้อมใช้งานแล้ว: ' + sh.getName());
+function whereAmI() {
+  var sh = sheet(), lay = layout(sh);
+  SpreadsheetApp.getActive().toast(
+    'แท็บ: ' + sh.getName() + ' · ข้อมูลเริ่มแถว ' + lay.start +
+    ' · มี ' + Math.max(0, sh.getLastRow() - lay.start + 1) + ' แถว', 'Curtain Check', 8);
 }
