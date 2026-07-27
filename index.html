@@ -22,11 +22,12 @@
 
   /* ---------- top bar ---------- */
   .bar{position:sticky;top:0;z-index:20;background:var(--ink);color:#fff;
-       padding:10px 14px;display:flex;align-items:center;gap:10px}
-  .bar h1{font-size:14px;font-weight:600;letter-spacing:.02em;margin:0;flex:1}
-  .bar .brasstick{width:3px;height:20px;background:var(--brass);border-radius:2px}
+       padding:10px 14px;display:flex;align-items:center;gap:8px}
+  .bar h1{font-size:14px;font-weight:600;letter-spacing:.02em;margin:0;flex:1;min-width:0;
+          overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar .brasstick{width:3px;height:20px;background:var(--brass);border-radius:2px;flex:none}
   .bar input{background:transparent;border:0;border-bottom:1px solid #44515F;color:#fff;
-             font-family:var(--sans);font-size:13px;width:88px;padding:2px 0;text-align:right}
+             font-family:var(--sans);font-size:13px;width:72px;padding:2px 0;text-align:right;flex:none}
   .bar input::placeholder{color:#7B8899}
   .bar input:focus{outline:none;border-bottom-color:var(--brass)}
 
@@ -159,12 +160,43 @@
   .hide{display:none}
   button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
   @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+  /* ---------- sheet sync ---------- */
+  .sync{display:flex;align-items:center;gap:5px;flex:none;background:#26313F;border:0;
+        border-radius:20px;padding:5px 10px;color:#9AA7B6;font-family:var(--sans);
+        font-size:11px;font-weight:600;cursor:pointer}
+  .sync .d{width:7px;height:7px;border-radius:50%;background:#7B8899;flex:none}
+  .sync.ok{color:#CFE9DA} .sync.ok .d{background:#3FBF7F}
+  .sync.busy{color:#F0DFBC} .sync.busy .d{background:var(--brass);animation:blink 1s infinite}
+  .sync.err{color:#F2C0BB} .sync.err .d{background:#E4695E}
+  @keyframes blink{50%{opacity:.2}}
+
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(20,28,40,.55);
+         display:flex;align-items:flex-end;justify-content:center}
+  .modal.hide{display:none}
+  .modal .box{background:var(--card);width:100%;max-width:520px;border-radius:14px 14px 0 0;
+              padding:16px 14px 20px;max-height:88vh;overflow:auto}
+  .modal h3{margin:0 0 4px;font-size:15px}
+  .modal p{margin:0 0 12px;font-size:12px;color:var(--mute);line-height:1.5}
+  .modal label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;
+               text-transform:uppercase;color:var(--mute);margin:10px 0 4px}
+  .modal input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;
+               font-family:var(--mono);font-size:12px}
+  .modal input:focus{outline:2px solid var(--brass);outline-offset:-1px}
+  .mbtns{display:flex;gap:8px;margin-top:14px}
+  .mbtns button{flex:1;padding:12px;border-radius:9px;border:1px solid var(--ink);background:var(--card);
+                font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
+  .mbtns button.solid{background:var(--ink);color:#fff}
+  .mnote{margin-top:12px;font-size:11.5px;color:var(--mute);font-family:var(--mono);word-break:break-all}
 </style>
 
 <div class="wrap">
   <div class="bar">
     <div class="brasstick"></div>
-    <h1>เช็คม่าน · Curtain Defect</h1>
+    <h1>เช็คม่าน · Curtain</h1>
+    <button class="sync" id="syncChip" title="ตั้งค่าการเชื่อมต่อ Google Sheet">
+      <span class="d"></span><span id="syncTxt">เชื่อมชีต</span>
+    </button>
     <input id="inspector" placeholder="ผู้ตรวจ" autocomplete="off">
   </div>
   <div class="tabs">
@@ -294,7 +326,11 @@
   <div id="viewList" class="hide">
     <div class="listwrap">
       <div class="actions">
-        <button class="solid" id="dl">ดาวน์โหลด CSV</button>
+        <button class="solid" id="push">↑ ส่งขึ้นชีตทั้งหมด</button>
+        <button id="pullBtn">↓ ดึงจากชีต</button>
+      </div>
+      <div class="actions">
+        <button id="dl">ดาวน์โหลด CSV</button>
         <button id="cp">คัดลอกไปวางในชีต</button>
       </div>
       <div id="recs"></div>
@@ -315,6 +351,29 @@
   </div>
 </div>
 <div class="toast" id="toast"></div>
+
+<!-- ============ SHEET CONFIG MODAL ============ -->
+<div class="modal hide" id="cfgModal">
+  <div class="box">
+    <h3>เชื่อมต่อ Google Sheet</h3>
+    <p>วาง URL ของ Apps Script Web App ที่ deploy จากชีตฐานข้อมูล
+       (ดูวิธีทำใน <b>SETUP.md</b> ของ repo นี้) — เมื่อเชื่อมแล้ว ทุกครั้งที่กด “บันทึก”
+       ข้อมูลจะขึ้นชีตทันที และหน้านี้จะดึงข้อมูลจากชีตให้อัตโนมัติทุก 15 วินาที</p>
+    <label for="cfgUrl">Web App URL</label>
+    <input id="cfgUrl" placeholder="https://script.google.com/macros/s/AKfy.../exec" autocomplete="off">
+    <label for="cfgToken">Token (ถ้าตั้งไว้ใน Apps Script)</label>
+    <input id="cfgToken" placeholder="เว้นว่างได้ถ้าไม่ได้ตั้ง" autocomplete="off">
+    <div class="mbtns">
+      <button id="cfgTest">ทดสอบ</button>
+      <button class="solid" id="cfgSave">บันทึก &amp; ซิงก์</button>
+    </div>
+    <div class="mbtns">
+      <button id="cfgOff">ยกเลิกการเชื่อมต่อ</button>
+      <button id="cfgClose">ปิด</button>
+    </div>
+    <div class="mnote" id="cfgNote"></div>
+  </div>
+</div>
 
 <script>
 const TYPE = {1:"grand corner",2:"deluxe twin",3:"deluxe king",4:"deluxe king",5:"deluxe king",
@@ -339,20 +398,41 @@ const CATS = [
 ];
 const STORE = "curtain-check-v2";
 
+/* ---------- Google Sheet sync config ----------
+   ใส่ URL ของ Apps Script Web App ตรงนี้ได้เลย เพื่อให้ทุกเครื่องที่เปิดหน้านี้
+   เชื่อมชีตอัตโนมัติโดยไม่ต้องตั้งค่าเอง (หรือจะตั้งผ่านปุ่ม “เชื่อมชีต” บนแถบบนก็ได้) */
+const SHEET_WEBAPP_URL = "";
+const SHEET_TOKEN      = "";
+const CFG_KEY = "curtain-sync-cfg";
+const OUT_KEY = "curtain-sync-outbox";
+const POLL_MS = 15000;
+
 let floor = 3, unit = 1, brand = "Dooya", inspector = "";
 let checks = {}, note = "", records = [], memory = null;
+let cfg = {url:SHEET_WEBAPP_URL, token:SHEET_TOKEN};
+let outbox = [], syncState = "off", syncMsg = "";
+let pulling = false, flushing = false, pollTimer = null;
 
 /* ---------- storage ---------- */
+const LS = {
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+};
 async function load(){
+  let raw = null;
+  try{ if(window.storage && window.storage.get){ const r = await window.storage.get(STORE); raw = r && r.value; } }catch(e){}
+  if(!raw) raw = LS.get(STORE);
   try{
-    const r = await window.storage.get(STORE);
-    const d = JSON.parse(r.value);
+    const d = JSON.parse(raw);
     records = d.records||[]; inspector = d.inspector||""; brand = d.brand||"Dooya";
   }catch(e){ if(memory){ records = memory.records; } }
 }
 async function persist(){
   const d = {records, inspector, brand}; memory = d;
-  try{ await window.storage.set(STORE, JSON.stringify(d)); }catch(e){}
+  const s = JSON.stringify(d);
+  LS.set(STORE, s);
+  try{ if(window.storage && window.storage.set) await window.storage.set(STORE, s); }catch(e){}
 }
 
 /* ---------- helpers ---------- */
@@ -369,6 +449,164 @@ function verdict(c){
 }
 function toast(t){ const el=document.getElementById("toast");
   el.textContent=t; el.classList.add("on"); setTimeout(()=>el.classList.remove("on"),1600); }
+
+/* ================= Google Sheet realtime sync ================= */
+function loadCfg(){
+  try{ const c = JSON.parse(LS.get(CFG_KEY)||"null"); if(c && c.url) cfg = c; }catch(e){}
+  const q = new URLSearchParams(location.search);
+  if(q.get("api")){                       // เปิดลิงก์แบบ ...index.html?api=<url>&token=<token> เพื่อตั้งค่าเครื่องใหม่เร็ว ๆ
+    cfg = {url:q.get("api").trim(), token:(q.get("token")||"").trim()};
+    saveCfg();
+    history.replaceState(null,"",location.pathname+location.hash);
+  }
+}
+function saveCfg(){ LS.set(CFG_KEY, JSON.stringify(cfg)); }
+function loadOutbox(){ try{ outbox = JSON.parse(LS.get(OUT_KEY)||"[]"); }catch(e){ outbox = []; } }
+function saveOutbox(){ LS.set(OUT_KEY, JSON.stringify(outbox)); }
+
+function setSync(state, msg){
+  syncState = state; syncMsg = msg||"";
+  const chip = document.getElementById("syncChip");
+  const txt  = document.getElementById("syncTxt");
+  if(!chip) return;
+  chip.className = "sync" + (state==="off" ? "" : " "+state);
+  txt.textContent = state==="off"  ? "เชื่อมชีต"
+                  : state==="busy" ? "กำลังซิงก์"
+                  : state==="err"  ? (outbox.length ? "ค้าง "+outbox.length : "ต่อไม่ติด")
+                  : "ชีตซิงก์แล้ว";
+  chip.title = msg || (state==="off" ? "ยังไม่ได้เชื่อม Google Sheet — แตะเพื่อตั้งค่า" : "แตะเพื่อตั้งค่า");
+}
+
+async function apiGet(action, extra){
+  const u = new URL(cfg.url);
+  u.searchParams.set("action", action);
+  if(cfg.token) u.searchParams.set("token", cfg.token);
+  Object.entries(extra||{}).forEach(([k,v])=>u.searchParams.set(k,v));
+  const r = await fetch(u.toString(), {method:"GET", redirect:"follow", cache:"no-store"});
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error||("HTTP "+r.status));
+  return j;
+}
+/* ใช้ text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script ตอบไม่ได้ */
+async function apiPost(body){
+  const r = await fetch(cfg.url, {method:"POST", redirect:"follow",
+    headers:{"Content-Type":"text/plain;charset=utf-8"},
+    body: JSON.stringify(Object.assign({token:cfg.token}, body))});
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error||("HTTP "+r.status));
+  return j;
+}
+
+function queue(op){
+  if(!cfg.url) return;
+  outbox.push(op); saveOutbox(); setSync("busy"); flush();
+}
+async function flush(){
+  if(flushing || !cfg.url || !outbox.length) return;
+  if(navigator.onLine === false){ setSync("err","ออฟไลน์ — จะส่งให้เมื่อกลับมาออนไลน์"); return; }
+  flushing = true; setSync("busy");
+  try{
+    while(outbox.length){
+      await apiPost(outbox[0]);
+      outbox.shift(); saveOutbox();
+    }
+    setSync("ok");
+    flushing = false;
+    await pull(true);
+  }catch(e){
+    setSync("err", String(e.message||e));
+  }finally{ flushing = false; }
+}
+async function pull(force){
+  if(pulling || !cfg.url) return;
+  if(outbox.length && !flushing){                  // มีของค้าง ส่งขึ้นก่อนเสมอ
+    await flush();
+    if(!outbox.length) return;                     // flush ดึงข้อมูลใหม่ให้เรียบร้อยแล้ว
+  }
+  pulling = true;
+  if(syncState !== "ok") setSync("busy");
+  try{
+    const j = await apiGet("list");
+    if(mergeRemote(j.records||[])){ await persist(); render(); }
+    setSync(outbox.length ? "busy" : "ok");
+  }catch(e){
+    setSync("err", String(e.message||e));
+  }finally{ pulling = false; }
+}
+
+/* รวมข้อมูลจากชีตเข้ากับเครื่อง: ใครแก้ทีหลังชนะ, ของที่ยังค้างในคิวชนะเสมอ */
+function mergeRemote(remote){
+  const before = JSON.stringify(records);
+  const map = new Map(records.map(r=>[r.room, r]));
+  const seen = new Set();
+  remote.forEach(rr=>{
+    if(!rr || !rr.room) return;
+    seen.add(rr.room);
+    const cur = map.get(rr.room);
+    if(!cur || (rr.updatedAt||0) >= (cur.updatedAt||0)) map.set(rr.room, Object.assign({}, rr, {synced:true}));
+  });
+  [...map.keys()].forEach(k=>{ if(map.get(k).synced && !seen.has(k)) map.delete(k); });
+  outbox.forEach(op=>{
+    if(op.action==="upsert") (op.records||[]).forEach(r=>map.set(r.room, r));
+    else if(op.action==="delete") map.delete(op.room);
+    else if(op.action==="clear") map.clear();
+  });
+  records = [...map.values()].sort((a,b)=>a.room-b.room);
+  return JSON.stringify(records) !== before;
+}
+
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  if(!cfg.url) return;
+  pollTimer = setInterval(()=>{
+    if(document.visibilityState === "visible") outbox.length ? flush() : pull();
+  }, POLL_MS);
+}
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") pull(); });
+window.addEventListener("online",  ()=>{ flush(); pull(); });
+window.addEventListener("offline", ()=> setSync("err","ออฟไลน์ — ข้อมูลถูกเก็บไว้ในเครื่องก่อน"));
+
+/* ---------- config modal ---------- */
+const modal = document.getElementById("cfgModal");
+function openCfg(){
+  document.getElementById("cfgUrl").value   = cfg.url||"";
+  document.getElementById("cfgToken").value = cfg.token||"";
+  document.getElementById("cfgNote").textContent =
+    syncMsg ? "สถานะล่าสุด: "+syncMsg : (cfg.url ? "เชื่อมอยู่กับ web app นี้" : "");
+  modal.classList.remove("hide");
+}
+function closeCfg(){ modal.classList.add("hide"); }
+document.getElementById("syncChip").onclick = openCfg;
+document.getElementById("cfgClose").onclick = closeCfg;
+modal.onclick = e=>{ if(e.target===modal) closeCfg(); };
+document.getElementById("cfgSave").onclick = async ()=>{
+  cfg = {url:document.getElementById("cfgUrl").value.trim(),
+         token:document.getElementById("cfgToken").value.trim()};
+  saveCfg(); startPolling();
+  if(!cfg.url){ setSync("off"); closeCfg(); return toast("ยกเลิกการเชื่อมต่อแล้ว"); }
+  closeCfg(); toast("เชื่อมชีตแล้ว — กำลังซิงก์");
+  if(records.length) queue({action:"upsert", records});
+  await flush(); await pull(true);
+};
+document.getElementById("cfgTest").onclick = async ()=>{
+  const url = document.getElementById("cfgUrl").value.trim();
+  const note = document.getElementById("cfgNote");
+  if(!url) return note.textContent = "ยังไม่ได้ใส่ URL";
+  note.textContent = "กำลังทดสอบ…";
+  const keep = cfg;
+  cfg = {url, token:document.getElementById("cfgToken").value.trim()};
+  try{
+    const j = await apiGet("ping");
+    note.textContent = `เชื่อมได้ ✓ ชีต “${j.sheet}” มี ${j.count} แถว`;
+  }catch(e){
+    note.textContent = "เชื่อมไม่ได้: " + (e.message||e);
+  }finally{ cfg = keep; }
+};
+document.getElementById("cfgOff").onclick = ()=>{
+  cfg = {url:"", token:""}; saveCfg(); outbox = []; saveOutbox();
+  if(pollTimer) clearInterval(pollTimer);
+  setSync("off"); closeCfg(); toast("ยกเลิกการเชื่อมต่อแล้ว");
+};
 
 /* ---------- build matrix rows ---------- */
 document.getElementById("mx").innerHTML = YN.map(([en,th,a,b])=>`
@@ -510,10 +748,12 @@ function loadRoom(){
 document.getElementById("save").onclick = ()=>{
   const v = verdict(checks); if(v.s==="รอตรวจ") return;
   const rec = {date:today(), floor, room:room(), type:TYPE[unit], brand,
-               checks:{...checks}, result:v.s, note, by:inspector};
+               checks:{...checks}, result:v.s, note, by:inspector,
+               updatedAt:Date.now(), synced:false};
   const i = records.findIndex(x=>x.room===rec.room);
   if(i>=0) records[i]=rec; else records.push(rec);
   persist();
+  queue({action:"upsert", records:[rec]});
   toast(v.s==="PASS" ? `${rec.room} ผ่าน — ไปห้องถัดไป` : `${rec.room} มีปัญหา ${v.n} จุด`);
   if(unit<12){ unit++; } else if(floor<20){ floor++; unit=1; }
   loadRoom();
@@ -562,10 +802,28 @@ document.getElementById("cp").onclick = async ()=>{
   catch(e){ toast("คัดลอกไม่สำเร็จ ใช้ปุ่มดาวน์โหลด CSV แทน"); }
 };
 document.getElementById("clr").onclick = ()=>{
-  if(!confirm("ลบข้อมูลที่บันทึกไว้ทั้งหมด?")) return;
-  records = []; persist(); loadRoom(); toast("ล้างข้อมูลแล้ว");
+  if(!confirm(cfg.url ? "ลบข้อมูลทั้งหมด (ทั้งในเครื่องและในชีต)?" : "ลบข้อมูลที่บันทึกไว้ทั้งหมด?")) return;
+  records = []; persist(); queue({action:"clear"}); loadRoom(); toast("ล้างข้อมูลแล้ว");
+};
+document.getElementById("push").onclick = ()=>{
+  if(!cfg.url) return openCfg();
+  if(!records.length) return toast("ยังไม่มีข้อมูลให้ส่ง");
+  queue({action:"upsert", records});
+  toast("กำลังส่ง "+records.length+" ห้องขึ้นชีต");
+};
+document.getElementById("pullBtn").onclick = async ()=>{
+  if(!cfg.url) return openCfg();
+  await pull(true);
+  toast(syncState==="ok" ? "ดึงข้อมูลจากชีตแล้ว" : "ดึงไม่สำเร็จ: "+syncMsg);
 };
 
 /* ---------- init ---------- */
-(async()=>{ await load(); document.getElementById("inspector").value = inspector; loadRoom(); })();
+(async()=>{
+  loadCfg(); loadOutbox();
+  await load();
+  document.getElementById("inspector").value = inspector;
+  loadRoom();
+  setSync(cfg.url ? "busy" : "off");
+  if(cfg.url){ startPolling(); await flush(); await pull(true); }
+})();
 </script>
