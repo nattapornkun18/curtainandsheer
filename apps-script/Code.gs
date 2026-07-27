@@ -3,7 +3,8 @@
  * ตัวกลางระหว่างหน้า index.html (GitHub Pages) กับชีตฐานข้อมูลเดิม
  *
  * เขียนลง "แท็บเดิม" ที่มีข้อมูลอยู่แล้วเท่านั้น — ไม่สร้างแท็บใหม่
- * ห้องเดิมของวันเดิม = ทับแถวเดิม | ห้องใหม่หรือวันใหม่ = ต่อท้ายเป็นแถวใหม่
+ * หนึ่งห้อง = หนึ่งแถว | ตรวจซ้ำ = ทับแถวเดิมของห้องนั้น (รวมวันที่ตรวจ)
+ * ห้องที่ยังไม่มีในตารางเท่านั้นถึงจะต่อท้ายเป็นแถวใหม่
  *
  * ติดตั้ง:  เปิดชีต → Extensions → Apps Script → วางไฟล์นี้ทับ Code.gs
  *          → Deploy → New deployment → Web app
@@ -147,7 +148,8 @@ function normDate(v) {
   return String(v === null || v === undefined ? '' : v).trim();
 }
 
-function keyOf(date, room) { return normDate(date) + '|' + String(room).trim(); }
+/** คีย์คือ “เลขห้อง” อย่างเดียว — ตรวจซ้ำจึงทับแถวเดิมเสมอ */
+function keyOf(room) { return String(Number(room) || '').trim(); }
 
 /** dd/MM/yyyy → 20260723 ไว้เทียบว่าแถวไหนใหม่กว่า */
 function dateRank(v) {
@@ -189,22 +191,21 @@ function recordToRow(r) {
   return row;
 }
 
-/** อ่านทุกแถว เหลือห้องละรายการล่าสุด (ดูจากวันที่ ถ้าวันเท่ากันเอาแถวล่างสุด) */
+/** อ่านทุกแถว เหลือห้องละรายการเดียว (ปกติมีแถวเดียวอยู่แล้ว
+ *  ถ้าเผลอมีซ้ำ เอาแถวที่วันที่ใหม่กว่า วันเท่ากันเอาแถวบนสุด) */
 function readAll() {
   var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
   if (last < lay.start) return [];
   var values = sh.getRange(lay.start, 1, last - lay.start + 1, WIDTH).getValues();
-  var latest = {};
+  var latest = {}, rank = {};
   values.forEach(function (row, i) {
     if (!Number(row[COL.ROOM])) return;
     var rec = rowToRecord(row);
-    rec.rank = dateRank(row[COL.DATE]) * 100000 + (lay.start + i);
-    var cur = latest[rec.room];
-    if (!cur || rec.rank >= cur.rank) latest[rec.room] = rec;
+    var d = dateRank(row[COL.DATE]);
+    if (!(rec.room in latest) || d > rank[rec.room]) { latest[rec.room] = rec; rank[rec.room] = d; }
   });
-  return Object.keys(latest).map(function (k) {
-    var r = latest[k]; delete r.rank; return r;
-  }).sort(function (a, b) { return a.room - b.room; });
+  return Object.keys(latest).map(function (k) { return latest[k]; })
+               .sort(function (a, b) { return a.room - b.room; });
 }
 
 /** คอลัมน์ไหนเป็นสูตร (ดูจากแถวข้อมูลล่าสุด) — จะได้ไม่เขียนทับสูตรของเจ้าของชีต */
@@ -244,7 +245,7 @@ function stampTemplate(sh, from, to) {
   f.forEach(function (x, i) { if (x) dst.offset(0, i, 1, 1).setFormulaR1C1(x); });
 }
 
-/** เขียนทับแถวที่ วันที่+เลขห้อง ตรงกัน ไม่ตรงก็ต่อท้ายเป็นแถวใหม่ */
+/** เขียนทับแถวของห้องนั้น (แถวบนสุดที่เจอ) ห้องที่ยังไม่มีค่อยต่อท้ายเป็นแถวใหม่ */
 function upsert(recs) {
   if (!recs || !recs.length) return 0;
   var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
@@ -254,7 +255,8 @@ function upsert(recs) {
     var keys = sh.getRange(lay.start, 1, last - lay.start + 1, COL.ROOM + 1).getValues();
     keys.forEach(function (row, i) {
       if (!Number(row[COL.ROOM])) return;
-      index[keyOf(row[COL.DATE], row[COL.ROOM])] = lay.start + i;
+      var k = keyOf(row[COL.ROOM]);
+      if (!index.hasOwnProperty(k)) index[k] = lay.start + i;   // เจอซ้ำ ยึดแถวบนสุด
       lastData = lay.start + i;
     });
   }
@@ -264,7 +266,7 @@ function upsert(recs) {
   recs.forEach(function (r) {
     if (!r || !Number(r.room)) return;
     var row = recordToRow(r);
-    var k = keyOf(row[COL.DATE], row[COL.ROOM]);
+    var k = keyOf(row[COL.ROOM]);
     if (!byKey.hasOwnProperty(k)) order.push(k);
     byKey[k] = row;
   });
@@ -304,7 +306,41 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Curtain Check')
     .addItem('เช็คว่าสคริปต์อ่านแท็บไหน', 'whereAmI')
+    .addItem('รวมแถวซ้ำ ให้เหลือห้องละแถว', 'dedupeRooms')
     .addToUi();
+}
+
+/**
+ * ใช้ครั้งเดียวตอนมีแถวซ้ำค้างอยู่ (เช่นแถวที่ถูกต่อท้ายไปก่อนหน้านี้)
+ * ยกข้อมูลของแถวที่วันที่ใหม่สุดขึ้นไปไว้ที่แถวบนสุดของห้องนั้น แล้วลบแถวที่เหลือ
+ * — ลำดับแถวเดิมในตารางไม่เปลี่ยน และคอลัมน์หลัง S ของแถวบนสุดไม่ถูกแตะ
+ */
+function dedupeRooms() {
+  var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
+  if (last < lay.start) return 0;
+  var values = sh.getRange(lay.start, 1, last - lay.start + 1, WIDTH).getValues();
+
+  var first = {}, best = {}, bestRank = {}, hasDupe = {}, dupes = [];
+  values.forEach(function (row, i) {
+    var room = Number(row[COL.ROOM]);
+    if (!room) return;
+    var at = lay.start + i, d = dateRank(row[COL.DATE]);
+    if (!(room in first)) { first[room] = at; best[room] = row; bestRank[room] = d; return; }
+    dupes.push(at); hasDupe[room] = true;
+    if (d > bestRank[room]) { best[room] = row; bestRank[room] = d; }
+  });
+
+  if (!dupes.length) {
+    SpreadsheetApp.getActive().toast('ไม่มีแถวซ้ำ — ห้องละแถวอยู่แล้ว', 'Curtain Check', 6);
+    return 0;
+  }
+  var segs = writableSegments(formulaCols(sh, first[Object.keys(hasDupe)[0]]));
+  Object.keys(hasDupe).forEach(function (room) {          // แตะเฉพาะห้องที่ซ้ำจริง
+    writeRow(sh, first[room], best[room], segs);
+  });
+  dupes.sort(function (a, b) { return b - a; }).forEach(function (r) { sh.deleteRow(r); });
+  SpreadsheetApp.getActive().toast('รวมแล้ว ลบแถวซ้ำไป ' + dupes.length + ' แถว', 'Curtain Check', 8);
+  return dupes.length;
 }
 
 function whereAmI() {
