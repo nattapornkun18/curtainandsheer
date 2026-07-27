@@ -37,7 +37,8 @@ function toRow_(d) {
 }
 
 function fmtDate_(v) {
-  if (v instanceof Date) {
+  // duck-type instead of `instanceof Date` — the latter is unreliable in Apps Script
+  if (v && typeof v.getTime === "function") {
     return Utilities.formatDate(v, Session.getScriptTimeZone(), "dd/MM/yyyy");
   }
   return v == null ? "" : String(v);
