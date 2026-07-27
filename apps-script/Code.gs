@@ -25,8 +25,9 @@ var SHEET_ID = '1YG-HCGAEmsliXe0eReUI52Tdl1bDdPhBwex24DRptl0';
 /** ★ ชื่อแท็บที่มีข้อมูลจริง — ต้องตรงกับชื่อแท็บล่างสุดของชีต */
 var SHEET_NAME = 'Check ม่าน';
 
-/** ตั้งเป็นข้อความลับสักชุด แล้วใส่ค่าเดียวกันในช่อง Token ของแอป
- *  ถ้าเว้นว่าง = ใครมี URL ก็เขียนได้ */
+/** ★ รหัสผ่าน (PIN) ที่ต้องกรอกก่อนเข้าใช้แอป — ตั้งเป็นตัวเลขกี่หลักก็ได้ เช่น '742'
+ *  ใส่ค่านี้แล้ว ใครไม่มีรหัสจะอ่านหรือเขียนข้อมูลไม่ได้เลย
+ *  ถ้าเว้นว่าง = ไม่ล็อก ใครมี URL ก็เข้าได้ */
 var TOKEN = '';
 
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
@@ -48,15 +49,21 @@ var HEAD = ['วันที่ตรวจ','ชั้น','Room No.','Room typ
 function doGet(e) {
   var p = (e && e.parameter) || {};
   try {
+    // ping ไม่ต้องใช้รหัส — แอปใช้ถามว่า "ต้องใส่รหัสไหม" ก่อนขึ้นหน้าล็อก
+    if ((p.action || '') === 'ping') {
+      var locked = !!TOKEN, info = {ok:true, locked:locked, ts:Date.now()};
+      if (!locked || String(p.token || '') === TOKEN) {
+        var sh = sheet(), lay = layout(sh);
+        info.sheet = sh.getName();
+        info.count = Math.max(0, sh.getLastRow() - lay.start + 1);
+      }
+      return json(info);
+    }
     guard(p.token);
     switch (p.action || 'list') {
-      case 'ping': {
-        var sh = sheet(), lay = layout(sh);
-        return json({ok:true, sheet:sh.getName(),
-                     count:Math.max(0, sh.getLastRow() - lay.start + 1), ts:Date.now()});
-      }
-      case 'list': return json({ok:true, records:readAll(), ts:Date.now()});
-      default:     return json({ok:false, error:'unknown action: ' + p.action});
+      case 'verify': return json({ok:true, ts:Date.now()});   // รหัสถูก
+      case 'list':   return json({ok:true, records:readAll(), ts:Date.now()});
+      default:       return json({ok:false, error:'unknown action: ' + p.action});
     }
   } catch (err) {
     return json({ok:false, error:String(err && err.message || err)});
