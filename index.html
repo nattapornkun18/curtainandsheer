@@ -339,20 +339,45 @@ const CATS = [
 ];
 const STORE = "curtain-check-v2";
 
-let floor = 3, unit = 1, brand = "Dooya", inspector = "";
-let checks = {}, note = "", records = [], memory = null;
+/* ---------- Google Sheet connection ----------
+   Paste the Apps Script Web App /exec URL here after deploying apps-script/Code.gs.
+   Leave "" to run offline (localStorage only). See DEPLOY.md. */
+const API = "https://script.google.com/macros/s/AKfycbxoiqVFhg6zeVQphZlHOcDr5-KfSDYgU096_XKSJTkhIiJECqC_kxR2M0AKDMjq6-g/exec";
 
-/* ---------- storage ---------- */
+let floor = 3, unit = 1, brand = "Dooya", inspector = "";
+let checks = {}, note = "", records = [];
+
+/* ---------- storage ----------
+   localStorage = offline cache + inspector/brand.
+   Google Sheet (via API) = shared source of truth for records. */
 async function load(){
   try{
-    const r = await window.storage.get(STORE);
-    const d = JSON.parse(r.value);
+    const d = JSON.parse(localStorage.getItem(STORE)||"{}");
     records = d.records||[]; inspector = d.inspector||""; brand = d.brand||"Dooya";
-  }catch(e){ if(memory){ records = memory.records; } }
+  }catch(e){}
+  if(API){
+    try{
+      const res = await fetch(API);
+      const j = await res.json();
+      if(j && j.records){
+        records = j.records;
+        localStorage.setItem(STORE, JSON.stringify({records, inspector, brand}));
+      }
+    }catch(e){ toast("โหลดจาก sheet ไม่ได้ — ใช้ข้อมูลในเครื่อง"); }
+  }
 }
 async function persist(){
-  const d = {records, inspector, brand}; memory = d;
-  try{ await window.storage.set(STORE, JSON.stringify(d)); }catch(e){}
+  try{ localStorage.setItem(STORE, JSON.stringify({records, inspector, brand})); }catch(e){}
+}
+/* upsert one room into the Sheet. undefined = not configured, true/false = sent ok/failed */
+async function pushToSheet(rec){
+  if(!API) return undefined;
+  try{
+    // text/plain avoids a CORS preflight; Apps Script still reads the JSON body
+    await fetch(API,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+      body:JSON.stringify(rec)});
+    return true;
+  }catch(e){ return false; }
 }
 
 /* ---------- helpers ---------- */
@@ -507,14 +532,16 @@ function loadRoom(){
   note = r ? r.note : "";
   render();
 }
-document.getElementById("save").onclick = ()=>{
+document.getElementById("save").onclick = async ()=>{
   const v = verdict(checks); if(v.s==="รอตรวจ") return;
   const rec = {date:today(), floor, room:room(), type:TYPE[unit], brand,
                checks:{...checks}, result:v.s, note, by:inspector};
   const i = records.findIndex(x=>x.room===rec.room);
   if(i>=0) records[i]=rec; else records.push(rec);
   persist();
-  toast(v.s==="PASS" ? `${rec.room} ผ่าน — ไปห้องถัดไป` : `${rec.room} มีปัญหา ${v.n} จุด`);
+  const sent = await pushToSheet(rec);
+  if(sent===false) toast(`${rec.room} บันทึกในเครื่อง — ส่งขึ้น sheet ไม่ได้`);
+  else toast(v.s==="PASS" ? `${rec.room} ผ่าน — ไปห้องถัดไป` : `${rec.room} มีปัญหา ${v.n} จุด`);
   if(unit<12){ unit++; } else if(floor<20){ floor++; unit=1; }
   loadRoom();
 };
