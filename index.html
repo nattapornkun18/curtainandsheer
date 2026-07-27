@@ -188,6 +188,29 @@
                 font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
   .mbtns button.solid{background:var(--ink);color:#fff}
   .mnote{margin-top:12px;font-size:11.5px;color:var(--mute);font-family:var(--mono);word-break:break-all}
+
+  /* ---------- lock screen ---------- */
+  .lock{position:fixed;inset:0;z-index:80;background:var(--ink);color:#fff;
+        display:flex;align-items:center;justify-content:center;padding:20px}
+  .lock.hide{display:none}
+  .lockbox{width:100%;max-width:300px;text-align:center}
+  .lockbox .brasstick{width:36px;height:3px;background:var(--brass);border-radius:2px;margin:0 auto 16px}
+  .lockttl{font-size:16px;font-weight:600;letter-spacing:.02em}
+  .locksub{font-size:12.5px;color:#9AA7B6;margin-top:5px;min-height:34px;line-height:1.4}
+  .locksub.bad{color:#F2A29A}
+  .dots{display:flex;gap:12px;justify-content:center;margin:14px 0 22px}
+  .dots i{width:13px;height:13px;border-radius:50%;border:1.5px solid #55626F;display:block}
+  .dots i.on{background:var(--brass);border-color:var(--brass)}
+  .shake{animation:shake .32s}
+  @keyframes shake{25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}}
+  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .pad button{height:56px;border:1px solid #37424F;background:#1D2732;color:#fff;border-radius:12px;
+              font-family:var(--mono);font-size:21px;font-weight:600;cursor:pointer}
+  .pad button:active{background:#2A3644}
+  .pad button.alt{font-size:15px;font-family:var(--sans);color:#9AA7B6;border-color:transparent;background:none}
+  .pad button:disabled{opacity:.4}
+  .lockbtn{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);background:none;
+           border-radius:9px;color:var(--mute);font-family:var(--sans);font-size:12px;cursor:pointer}
 </style>
 
 <div class="wrap">
@@ -334,9 +357,8 @@
         <button id="cp">คัดลอกไปวางในชีต</button>
       </div>
       <div id="recs"></div>
-      <button id="clr" style="width:100%;margin-top:14px;padding:10px;border:1px solid var(--line);
-        background:none;border-radius:9px;color:var(--mute);font-family:var(--sans);font-size:12px;cursor:pointer">
-        ล้างข้อมูลในเครื่องนี้ (ชีตไม่ถูกแตะ)</button>
+      <button class="lockbtn" id="lockNow" style="margin-top:14px">🔒 ล็อกหน้าจอ</button>
+      <button class="lockbtn" id="clr">ล้างข้อมูลในเครื่องนี้ (ชีตไม่ถูกแตะ)</button>
     </div>
   </div>
 </div>
@@ -352,6 +374,17 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<!-- ============ LOCK SCREEN ============ -->
+<div class="lock hide" id="lock">
+  <div class="lockbox">
+    <div class="brasstick"></div>
+    <div class="lockttl">เช็คม่าน · Curtain</div>
+    <div class="locksub" id="lockmsg">ใส่รหัสเพื่อเข้าใช้งาน</div>
+    <div class="dots" id="dots"></div>
+    <div class="pad" id="pad"></div>
+  </div>
+</div>
+
 <!-- ============ SHEET CONFIG MODAL ============ -->
 <div class="modal hide" id="cfgModal">
   <div class="box">
@@ -361,8 +394,8 @@
        ข้อมูลจะขึ้นชีตทันที และหน้านี้จะดึงข้อมูลจากชีตให้อัตโนมัติทุก 15 วินาที</p>
     <label for="cfgUrl">Web App URL</label>
     <input id="cfgUrl" placeholder="https://script.google.com/macros/s/AKfy.../exec" autocomplete="off">
-    <label for="cfgToken">Token (ถ้าตั้งไว้ใน Apps Script)</label>
-    <input id="cfgToken" placeholder="เว้นว่างได้ถ้าไม่ได้ตั้ง" autocomplete="off">
+    <label for="cfgToken">รหัสผ่าน (ต้องตรงกับ TOKEN ใน Apps Script)</label>
+    <input id="cfgToken" placeholder="เว้นว่าง = ไม่ล็อก" autocomplete="off" inputmode="numeric">
     <div class="mbtns">
       <button id="cfgTest">ทดสอบ</button>
       <button class="solid" id="cfgSave">บันทึก &amp; ซิงก์</button>
@@ -401,17 +434,25 @@ const STORE = "curtain-check-v2";
 /* ---------- Google Sheet sync config ----------
    ใส่ URL ของ Apps Script Web App ตรงนี้ได้เลย เพื่อให้ทุกเครื่องที่เปิดหน้านี้
    เชื่อมชีตอัตโนมัติโดยไม่ต้องตั้งค่าเอง (หรือจะตั้งผ่านปุ่ม “เชื่อมชีต” บนแถบบนก็ได้) */
-const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyUGnigWmVD_AuoLioUJFvsVJzPl8woaoDysZZ7xzAso3gvgNXEJ4cy6kuU7JiM8eK8rQ/exec";
+const SHEET_WEBAPP_URL = "";
 const SHEET_TOKEN      = "";
 const CFG_KEY = "curtain-sync-cfg";
 const OUT_KEY = "curtain-sync-outbox";
 const POLL_MS = 15000;
+
+/* ---------- รหัสผ่าน ----------
+   รหัสตัวจริงอยู่ที่ตัวแปร TOKEN ใน Apps Script — ใส่ผิดคือชีตไม่ให้ทั้งอ่านและเขียน
+   PIN_LEN แค่บอกว่ารหัสยาวกี่หลัก (ให้ตรงกับที่ตั้งไว้ใน Apps Script)
+   APP_PIN ใช้เฉพาะกรณียังไม่ได้เชื่อมชีต — ล็อกหน้าจอเฉย ๆ เท่านั้น */
+const PIN_LEN = 3;
+const APP_PIN = "";
 
 let floor = 3, unit = 1, brand = "Dooya", inspector = "";
 let checks = {}, note = "", records = [], memory = null;
 let cfg = {url:SHEET_WEBAPP_URL, token:SHEET_TOKEN};
 let outbox = [], syncState = "off", syncMsg = "";
 let pulling = false, flushing = false, pollTimer = null;
+let unlocked = false, pinBuf = "";
 
 /* ---------- storage ---------- */
 const LS = {
@@ -502,7 +543,7 @@ function queue(op){
   outbox.push(op); saveOutbox(); setSync("busy"); flush();
 }
 async function flush(){
-  if(flushing || !cfg.url || !outbox.length) return;
+  if(flushing || !unlocked || !cfg.url || !outbox.length) return;
   if(navigator.onLine === false){ setSync("err","ออฟไลน์ — จะส่งให้เมื่อกลับมาออนไลน์"); return; }
   flushing = true; setSync("busy");
   try{
@@ -522,7 +563,7 @@ async function flush(){
   }finally{ flushing = false; }
 }
 async function pull(force){
-  if(pulling || !cfg.url) return;
+  if(pulling || !unlocked || !cfg.url) return;
   if(outbox.length && !flushing){                  // มีของค้าง ส่งขึ้นก่อนเสมอ
     await flush();
     if(!outbox.length) return;                     // flush ดึงข้อมูลใหม่ให้เรียบร้อยแล้ว
@@ -565,6 +606,100 @@ document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState=
 window.addEventListener("online",  ()=>{ flush(); pull(); });
 window.addEventListener("offline", ()=> setSync("err","ออฟไลน์ — ข้อมูลถูกเก็บไว้ในเครื่องก่อน"));
 
+/* ================= หน้าล็อก (รหัสผ่าน) ================= */
+const lockEl = document.getElementById("lock");
+const dotsEl = document.getElementById("dots");
+const padEl  = document.getElementById("pad");
+const msgEl  = document.getElementById("lockmsg");
+
+dotsEl.innerHTML = Array.from({length:PIN_LEN},()=>"<i></i>").join("");
+padEl.innerHTML = [1,2,3,4,5,6,7,8,9].map(n=>`<button data-d="${n}">${n}</button>`).join("")
+  + `<button class="alt" data-a="del">ลบ</button><button data-d="0">0</button><button class="alt" data-a="ok">ตกลง</button>`;
+
+function drawDots(){
+  dotsEl.querySelectorAll("i").forEach((d,i)=>d.classList.toggle("on", i < pinBuf.length));
+}
+function lockMsg(t, bad){
+  msgEl.textContent = t;
+  msgEl.classList.toggle("bad", !!bad);
+}
+function shake(){
+  const b = lockEl.querySelector(".lockbox");
+  b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake");
+}
+
+/** ตรวจรหัสกับฝั่งชีต (ของจริง) — ถ้าไม่ได้เชื่อมชีตค่อยเทียบกับ APP_PIN ในเครื่อง */
+async function tryPin(p){
+  if(!cfg.url) return APP_PIN ? p === APP_PIN : true;
+  const keep = cfg.token;
+  cfg.token = p;
+  try{
+    await apiGet("verify");
+    saveCfg();
+    return true;
+  }catch(e){
+    cfg.token = keep;
+    if(/unauthorized/.test(String(e.message||e))) return false;
+    // ต่อเน็ตไม่ติด — ยอมให้เข้าถ้าตรงกับรหัสที่เคยใช้ได้ในเครื่องนี้
+    if(keep && p === keep){ cfg.token = p; return true; }
+    throw e;
+  }
+}
+
+function openLock(){
+  unlocked = false; pinBuf = ""; drawDots();
+  if(pollTimer) clearInterval(pollTimer);
+  lockMsg("ใส่รหัสเพื่อเข้าใช้งาน");
+  lockEl.classList.remove("hide");
+}
+function passLock(){
+  unlocked = true; pinBuf = "";
+  lockEl.classList.add("hide");
+  render();
+  startSync();
+}
+
+async function submitPin(){
+  if(pinBuf.length < 1) return;
+  const p = pinBuf;
+  lockMsg("กำลังตรวจรหัส…");
+  try{
+    if(await tryPin(p)) return passLock();
+    pinBuf = ""; drawDots(); shake(); lockMsg("รหัสไม่ถูกต้อง ลองใหม่อีกครั้ง", true);
+  }catch(e){
+    pinBuf = ""; drawDots(); lockMsg("ต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง", true);
+  }
+}
+padEl.onclick = e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  if(b.dataset.a === "del"){ pinBuf = pinBuf.slice(0,-1); drawDots(); return; }
+  if(b.dataset.a === "ok") return submitPin();
+  if(pinBuf.length >= PIN_LEN) return;
+  pinBuf += b.dataset.d; drawDots();
+  if(pinBuf.length === PIN_LEN) submitPin();
+};
+document.addEventListener("keydown", e=>{
+  if(lockEl.classList.contains("hide")) return;
+  if(/^[0-9]$/.test(e.key)){ if(pinBuf.length < PIN_LEN){ pinBuf += e.key; drawDots();
+      if(pinBuf.length === PIN_LEN) submitPin(); } }
+  else if(e.key === "Backspace"){ pinBuf = pinBuf.slice(0,-1); drawDots(); }
+  else if(e.key === "Enter") submitPin();
+});
+
+/** ต้องใส่รหัสไหม แล้วปลดล็อกให้เลยถ้ารหัสเดิมยังใช้ได้ */
+async function gate(){
+  let needed = !!APP_PIN;
+  if(cfg.url){
+    try{ const j = await apiGet("ping"); needed = !!j.locked || !!APP_PIN; }
+    catch(e){ needed = !!(cfg.token || APP_PIN); }   // ออฟไลน์ — เคยตั้งรหัสไว้ก็ยังล็อก
+  }
+  if(!needed) return passLock();
+  if(cfg.token){
+    try{ if(await tryPin(cfg.token)) return passLock(); }catch(e){}
+  }
+  openLock();
+}
+
 /* ---------- config modal ---------- */
 const modal = document.getElementById("cfgModal");
 function openCfg(){
@@ -596,7 +731,8 @@ document.getElementById("cfgTest").onclick = async ()=>{
   cfg = {url, token:document.getElementById("cfgToken").value.trim()};
   try{
     const j = await apiGet("ping");
-    note.textContent = `เชื่อมได้ ✓ ชีต “${j.sheet}” มี ${j.count} แถว`;
+    note.textContent = j.sheet ? `เชื่อมได้ ✓ แท็บ “${j.sheet}” มี ${j.count} แถว`
+                               : "เชื่อมได้ ✓ แต่รหัสผ่านไม่ถูก — แก้ช่องรหัสผ่านให้ตรงกับ TOKEN";
   }catch(e){
     note.textContent = "เชื่อมไม่ได้: " + (e.message||e);
   }finally{ cfg = keep; }
@@ -818,13 +954,21 @@ document.getElementById("pullBtn").onclick = async ()=>{
   toast(syncState==="ok" ? "ดึงข้อมูลจากชีตแล้ว" : "ดึงไม่สำเร็จ: "+syncMsg);
 };
 
+document.getElementById("lockNow").onclick = ()=>{ openLock(); window.scrollTo(0,0); };
+
 /* ---------- init ---------- */
+async function startSync(){
+  if(!cfg.url || !unlocked) return;
+  startPolling();
+  await flush();
+  await pull(true);
+}
 (async()=>{
   loadCfg(); loadOutbox();
   await load();
   document.getElementById("inspector").value = inspector;
   loadRoom();
   setSync(cfg.url ? "busy" : "off");
-  if(cfg.url){ startPolling(); await flush(); await pull(true); }
+  await gate();
 })();
 </script>
