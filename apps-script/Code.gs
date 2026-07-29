@@ -30,8 +30,34 @@ var SHEET_NAME = 'Check ม่าน';
  *  ถ้าเว้นว่าง = ไม่ล็อก ใครมี URL ก็เข้าได้ */
 var TOKEN = '';
 
+/* ===================== แจ้งเตือนเข้า LINE =====================
+   ตั้งค่าครั้งเดียว (วิธีทำอยู่ใน SETUP.md หัวข้อ “แจ้งเตือนเข้า LINE”)
+   เว้น LINE_TOKEN ว่างไว้ = ไม่ส่งแจ้งเตือน ระบบอื่นทำงานปกติทุกอย่าง */
+
+/** Channel access token (long-lived) จาก LINE Developers */
+var LINE_TOKEN = '';
+
+/** เว้นว่าง = ส่งหาทุกคนที่เป็นเพื่อนกับ LINE OA นี้ (broadcast)
+ *  ใส่ userId / groupId ถ้าอยากส่งเจาะจงคนเดียวหรือกลุ่มเดียว */
+var LINE_TO = '';
+
+/** true = แจ้งเฉพาะห้องที่เจอปัญหา (ประหยัดโควตาข้อความมาก) */
+var NOTIFY_ONLY_DEFECT = false;
+
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
             'manualSheer','manualCurtain','soundSheer','soundCurtain','smooth'];
+
+/** ค่าที่ถือว่า “ปกติ” ของแต่ละหัวข้อ — ไม่ตรงกับนี้คือมีปัญหา */
+var GOOD = {closeSheer:'ปิดสุด', closeCurtain:'ปิดสุด', openSheer:'เปิดสุด', openCurtain:'เปิดสุด',
+            switchSheer:'good', switchCurtain:'good', manualSheer:'good', manualCurtain:'good',
+            soundSheer:'good', soundCurtain:'good', smooth:'good'};
+
+var LABEL = {closeSheer:'ปิด ม่านโปร่ง', closeCurtain:'ปิด ม่านทึบ',
+             openSheer:'เปิด ม่านโปร่ง', openCurtain:'เปิด ม่านทึบ',
+             switchSheer:'สวิตช์ ม่านโปร่ง', switchCurtain:'สวิตช์ ม่านทึบ',
+             manualSheer:'มือดึง ม่านโปร่ง', manualCurtain:'มือดึง ม่านทึบ',
+             soundSheer:'เสียง ม่านโปร่ง', soundCurtain:'เสียง ม่านทึบ',
+             smooth:'เดินลื่นทั้งระบบ'};
 
 /** คอลัมน์ A–S ตามตารางเดิม — คอลัมน์ถัดจากนี้ (เช่น “สถานะ”) แอปไม่แตะ */
 var WIDTH = 19;
@@ -78,19 +104,27 @@ function doPost(e) {
     return json({ok:false, error:'bad JSON body'});
   }
   var lock = LockService.getScriptLock();
+  var result, saved = null;
   try {
     guard(body.token);
     lock.waitLock(25000);
     switch (body.action) {
-      case 'upsert': return json({ok:true, written:upsert(body.records || (body.record ? [body.record] : [])), ts:Date.now()});
-      case 'delete': return json({ok:true, deleted:remove(body.room, body.date), ts:Date.now()});
-      default:       return json({ok:false, error:'unknown action: ' + body.action});
+      case 'upsert': {
+        var recs = body.records || (body.record ? [body.record] : []);
+        result = json({ok:true, written:upsert(recs), ts:Date.now()});
+        saved = recs;                                  // ค่อยแจ้งเตือนหลังปล่อยล็อก
+        break;
+      }
+      case 'delete': result = json({ok:true, deleted:remove(body.room, body.date), ts:Date.now()}); break;
+      default:       result = json({ok:false, error:'unknown action: ' + body.action});
     }
   } catch (err) {
-    return json({ok:false, error:String(err && err.message || err)});
+    result = json({ok:false, error:String(err && err.message || err)});
   } finally {
     try { lock.releaseLock(); } catch (ignore) {}
   }
+  if (saved) notify(saved);
+  return result;
 }
 
 /* ============================ core ============================ */
@@ -307,6 +341,75 @@ function remove(roomNo, date) {
   return kill.length;
 }
 
+/* ============================ แจ้งเตือน LINE ============================ */
+
+/** จุดที่ไม่ปกติของห้องนั้น เช่น ["สวิตช์ ม่านทึบ: bad", "ปิด ม่านโปร่ง: ปิดไม่ได้ เหลือครึ่งทาง"] */
+function badPoints(r) {
+  var out = [];
+  KEYS.forEach(function (k) {
+    var v = r.checks && r.checks[k];
+    if (v && String(v).trim() !== GOOD[k]) out.push(LABEL[k] + ': ' + v);
+  });
+  return out;
+}
+
+function roomMessage(r) {
+  var bad = badPoints(r);
+  var lines = [(bad.length ? '🔴 ' : '🟢 ') + r.room + (r.type ? ' · ' + r.type : '')];
+  lines.push(bad.length ? 'พบปัญหา ' + bad.length + ' จุด' : 'ปกติทุกหัวข้อ');
+  bad.forEach(function (b) { lines.push('• ' + b); });
+  if (r.note) lines.push('📝 ' + r.note);
+  lines.push('— ' + (r.by || 'ไม่ระบุผู้ตรวจ') + (r.date ? ' · ' + r.date : ''));
+  return lines.join('\n');
+}
+
+/** ส่งทีเดียวหลายห้อง (เช่นกดปุ่ม “ส่งขึ้นชีตทั้งหมด”) ยุบเป็นข้อความเดียว */
+function batchMessage(list) {
+  var bad = list.filter(function (r) { return badPoints(r).length; });
+  var lines = ['📋 อัปเดต ' + list.length + ' ห้อง',
+               'ปกติ ' + (list.length - bad.length) + ' · มีปัญหา ' + bad.length];
+  if (bad.length) {
+    lines.push('');
+    bad.forEach(function (r) {
+      lines.push('🔴 ' + r.room + ' — ' + badPoints(r).join(', ') + (r.note ? ' (' + r.note + ')' : ''));
+    });
+  }
+  var by = list[0] || {};
+  lines.push('', '— ' + (by.by || 'ไม่ระบุผู้ตรวจ') + (by.date ? ' · ' + by.date : ''));
+  return lines.join('\n');
+}
+
+/** ส่งข้อความเข้า LINE — ไม่มี token ก็เงียบไป ไม่ทำให้การบันทึกพัง */
+function lineSend(text) {
+  if (!LINE_TOKEN) return false;
+  var url = LINE_TO ? 'https://api.line.me/v2/bot/message/push'
+                    : 'https://api.line.me/v2/bot/message/broadcast';
+  var payload = {messages:[{type:'text', text:String(text).slice(0, 4900)}]};
+  if (LINE_TO) payload.to = LINE_TO;
+  var res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    headers: {Authorization: 'Bearer ' + LINE_TOKEN},
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  });
+  var code = res.getResponseCode();
+  if (code !== 200) throw new Error('LINE ' + code + ': ' + res.getContentText());
+  return true;
+}
+
+function notify(recs) {
+  if (!LINE_TOKEN || !recs || !recs.length) return;
+  try {
+    var list = recs.filter(function (r) { return r && Number(r.room); });
+    if (NOTIFY_ONLY_DEFECT) list = list.filter(function (r) { return badPoints(r).length; });
+    if (!list.length) return;
+    lineSend(list.length === 1 ? roomMessage(list[0]) : batchMessage(list));
+  } catch (err) {
+    console.log('แจ้งเตือน LINE ไม่สำเร็จ: ' + err);   // ข้อมูลลงชีตแล้ว ไม่ต้องล้มทั้ง request
+  }
+}
+
 /* ============================ เมนูช่วยเช็คในชีต ============================ */
 
 function onOpen() {
@@ -314,7 +417,25 @@ function onOpen() {
     .createMenu('Curtain Check')
     .addItem('เช็คว่าสคริปต์อ่านแท็บไหน', 'whereAmI')
     .addItem('รวมแถวซ้ำ ให้เหลือห้องละแถว', 'dedupeRooms')
+    .addItem('ทดสอบส่งแจ้งเตือน LINE', 'testLine')
     .addToUi();
+}
+
+function testLine() {
+  var ui = SpreadsheetApp.getUi();
+  if (!LINE_TOKEN) {
+    ui.alert('ยังไม่ได้ใส่ LINE_TOKEN ใน Code.gs — ดูวิธีทำใน SETUP.md');
+    return;
+  }
+  try {
+    lineSend('🔔 ทดสอบแจ้งเตือนจากชีตเช็คม่าน\nถ้าเห็นข้อความนี้ = ตั้งค่าเรียบร้อยแล้ว');
+    ui.alert('ส่งแล้ว — ไปเช็คใน LINE ได้เลย\n' +
+             (LINE_TO ? 'ส่งเจาะจงไปที่ ' + LINE_TO : 'ส่งหาทุกคนที่เป็นเพื่อนกับ LINE OA นี้'));
+  } catch (err) {
+    ui.alert('ส่งไม่สำเร็จ\n\n' + err +
+             '\n\n401 = token ผิด/หมดอายุ · 403 = แผนหรือสิทธิ์ไม่ให้ส่ง' +
+             '\n429 = ส่งครบโควตาเดือนนี้แล้ว');
+  }
 }
 
 /**
