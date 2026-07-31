@@ -41,8 +41,13 @@ var LINE_TOKEN = '';
  *  ใส่ userId / groupId ถ้าอยากส่งเจาะจงคนเดียวหรือกลุ่มเดียว */
 var LINE_TO = '';
 
-/** true = แจ้งเฉพาะห้องที่เจอปัญหา (ประหยัดโควตาข้อความมาก) */
-var NOTIFY_ONLY_DEFECT = false;
+/** จะแจ้งตอนไหน
+ *  'update' = เฉพาะตอนแก้ไขห้องที่เคยบันทึกไว้แล้ว และมีอะไรเปลี่ยนจริง  ← ค่าเริ่มต้น
+ *  'defect' = เฉพาะห้องที่ผลออกมามีปัญหา (ตรวจครั้งแรกก็แจ้ง)
+ *  'all'    = ทุกครั้งที่กดบันทึก
+ *  'off'    = ไม่แจ้งเลย
+ *  ตรวจครั้งแรกของห้อง (แถว “รอตรวจ” ที่ยังไม่มีวันที่) ไม่นับเป็นการแก้ไข */
+var NOTIFY_WHEN = 'update';
 
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
             'manualSheer','manualCurtain','soundSheer','soundCurtain','smooth'];
@@ -110,9 +115,9 @@ function doPost(e) {
     lock.waitLock(25000);
     switch (body.action) {
       case 'upsert': {
-        var recs = body.records || (body.record ? [body.record] : []);
-        result = json({ok:true, written:upsert(recs), ts:Date.now()});
-        saved = recs;                                  // ค่อยแจ้งเตือนหลังปล่อยล็อก
+        var res = upsert(body.records || (body.record ? [body.record] : []));
+        result = json({ok:true, written:res.written, updated:res.updates.length, ts:Date.now()});
+        saved = res;                                   // ค่อยแจ้งเตือนหลังปล่อยล็อก
         break;
       }
       case 'delete': result = json({ok:true, deleted:remove(body.room, body.date), ts:Date.now()}); break;
@@ -286,44 +291,67 @@ function stampTemplate(sh, from, to) {
   f.forEach(function (x, i) { if (x) dst.offset(0, i, 1, 1).setFormulaR1C1(x); });
 }
 
-/** เขียนทับแถวของห้องนั้น (แถวบนสุดที่เจอ) ห้องที่ยังไม่มีค่อยต่อท้ายเป็นแถวใหม่ */
+/** แถวนี้เคยถูกตรวจแล้วหรือยัง (แถว “รอตรวจ” ที่ยังไม่มีวันที่/ผลตรวจ = ยัง) */
+function hasInspection(row) {
+  if (normDate(row[COL.DATE])) return true;
+  for (var i = 0; i < KEYS.length; i++) {
+    if (String(row[COL.CHECK0 + i] === undefined ? '' : row[COL.CHECK0 + i]).trim()) return true;
+  }
+  return false;
+}
+
+/**
+ * เขียนทับแถวของห้องนั้น (แถวบนสุดที่เจอ) ห้องที่ยังไม่มีค่อยต่อท้ายเป็นแถวใหม่
+ * คืน {written, updates} — updates คือเฉพาะห้องที่ “เคยบันทึกไว้แล้ว” และถูกเขียนทับ
+ * แต่ละตัวมี {before, after} ไว้เทียบว่าอะไรเปลี่ยนไปบ้าง
+ */
 function upsert(recs) {
-  if (!recs || !recs.length) return 0;
+  if (!recs || !recs.length) return {written:0, updates:[]};
   var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
 
-  var index = {}, lastData = 0;
+  var index = {}, snapshot = {}, lastData = 0;
   if (last >= lay.start) {
-    var keys = sh.getRange(lay.start, 1, last - lay.start + 1, COL.ROOM + 1).getValues();
-    keys.forEach(function (row, i) {
+    var rows = sh.getRange(lay.start, 1, last - lay.start + 1, WIDTH).getValues();
+    rows.forEach(function (row, i) {
       if (!Number(row[COL.ROOM])) return;
       var k = keyOf(row[COL.ROOM]);
-      if (!index.hasOwnProperty(k)) index[k] = lay.start + i;   // เจอซ้ำ ยึดแถวบนสุด
+      if (!index.hasOwnProperty(k)) {                            // เจอซ้ำ ยึดแถวบนสุด
+        index[k] = lay.start + i;
+        snapshot[k] = hasInspection(row) ? rowToRecord(row) : null;
+      }
       lastData = lay.start + i;
     });
   }
 
   // ยุบรายการซ้ำในชุดเดียวกัน เหลืออันที่ส่งมาทีหลังสุด
-  var byKey = {}, order = [];
+  var byRow = {}, byRec = {}, order = [];
   recs.forEach(function (r) {
     if (!r || !Number(r.room)) return;
     var row = recordToRow(r);
     var k = keyOf(row[COL.ROOM]);
-    if (!byKey.hasOwnProperty(k)) order.push(k);
-    byKey[k] = row;
+    if (!byRow.hasOwnProperty(k)) order.push(k);
+    byRow[k] = row; byRec[k] = r;
   });
 
   var segs = writableSegments(formulaCols(sh, lastData));
   var cursor = lastData || (lay.start - 1);
+  var updates = [];
   order.forEach(function (k) {
     var at = index[k];
     if (!at) {
       at = ++cursor;
       if (lastData) stampTemplate(sh, lastData, at);
+    } else if (snapshot[k]) {
+      updates.push({before: snapshot[k], after: byRec[k]});       // ห้องนี้เคยบันทึกไว้แล้ว
     }
-    writeRow(sh, at, byKey[k], segs);
+    writeRow(sh, at, byRow[k], segs);
     index[k] = at;
   });
-  return order.length;
+  return {
+    written: order.length,
+    all: order.map(function (k) { return byRec[k]; }),   // ทุกห้องที่เขียนลงไป
+    updates: updates                                     // เฉพาะห้องที่เคยบันทึกไว้แล้ว
+  };
 }
 
 /** ลบห้อง — ระบุ date ด้วยเพื่อลบเฉพาะวันนั้น ไม่ระบุ = ลบทุกแถวของห้องนั้น */
@@ -398,13 +426,75 @@ function lineSend(text) {
   return true;
 }
 
-function notify(recs) {
-  if (!LINE_TOKEN || !recs || !recs.length) return;
+function resultOf(r) {
+  return r.result || (badPoints(r).length ? 'DEFECT' : 'PASS');
+}
+
+/** หัวข้อที่ค่าเปลี่ยนไปจากครั้งก่อน */
+function diffLines(before, after) {
+  var out = [];
+  KEYS.forEach(function (k) {
+    var a = String((before.checks && before.checks[k]) || '').trim();
+    var b = String((after.checks && after.checks[k]) || '').trim();
+    if (a !== b) out.push('• ' + LABEL[k] + ': ' + (a || '—') + ' → ' + (b || '—'));
+  });
+  return out;
+}
+
+function changed(u) {
+  return diffLines(u.before, u.after).length > 0 ||
+         String(u.before.note || '') !== String(u.after.note || '') ||
+         resultOf(u.before) !== resultOf(u.after);
+}
+
+/** ข้อความตอนแก้ไขห้องที่เคยบันทึกแล้ว — บอกว่าเปลี่ยนจากอะไรเป็นอะไร */
+function updateMessage(u) {
+  var b = u.before, a = u.after;
+  var rb = resultOf(b), ra = resultOf(a);
+  var lines = ['✏️ แก้ไข ' + a.room + (a.type ? ' · ' + a.type : '')];
+  lines.push(rb === ra ? 'ผลตรวจ: ' + ra
+                       : (ra === 'PASS' ? '🟢 ' : '🔴 ') + 'ผลตรวจ: ' + rb + ' → ' + ra);
+  diffLines(b, a).forEach(function (d) { lines.push(d); });
+  if (String(b.note || '') !== String(a.note || '')) {
+    lines.push('📝 ' + (b.note || '(ว่าง)') + ' → ' + (a.note || '(ว่าง)'));
+  }
+  lines.push('— ' + (a.by || 'ไม่ระบุผู้ตรวจ') + (a.date ? ' · ' + a.date : '') +
+             (b.date && b.date !== a.date ? ' (ตรวจครั้งก่อน ' + b.date + ')' : ''));
+  return lines.join('\n');
+}
+
+function updateBatchMessage(list) {
+  var lines = ['✏️ แก้ไข ' + list.length + ' ห้อง', ''];
+  list.forEach(function (u) {
+    var rb = resultOf(u.before), ra = resultOf(u.after);
+    var d = diffLines(u.before, u.after);
+    lines.push((ra === 'PASS' ? '🟢 ' : '🔴 ') + u.after.room + ' — ' +
+               (rb === ra ? ra : rb + ' → ' + ra) +
+               (d.length ? ' (' + d.length + ' จุดเปลี่ยน)' : ''));
+  });
+  var by = list[0].after;
+  lines.push('', '— ' + (by.by || 'ไม่ระบุผู้ตรวจ') + (by.date ? ' · ' + by.date : ''));
+  return lines.join('\n');
+}
+
+/** res = ผลจาก upsert() : {written, updates:[{before, after}]} */
+function notify(res) {
+  if (!LINE_TOKEN || NOTIFY_WHEN === 'off' || !res) return;
   try {
-    var list = recs.filter(function (r) { return r && Number(r.room); });
-    if (NOTIFY_ONLY_DEFECT) list = list.filter(function (r) { return badPoints(r).length; });
-    if (!list.length) return;
-    lineSend(list.length === 1 ? roomMessage(list[0]) : batchMessage(list));
+    var updates = res.updates || [];
+    var text = null;
+
+    if (NOTIFY_WHEN === 'update') {
+      var real = updates.filter(changed);              // บันทึกซ้ำโดยไม่เปลี่ยนอะไร = ไม่กวน
+      if (!real.length) return;
+      text = real.length === 1 ? updateMessage(real[0]) : updateBatchMessage(real);
+    } else {
+      var list = (res.all || []).filter(function (r) { return r && Number(r.room); });
+      if (NOTIFY_WHEN === 'defect') list = list.filter(function (r) { return badPoints(r).length; });
+      if (!list.length) return;
+      text = list.length === 1 ? roomMessage(list[0]) : batchMessage(list);
+    }
+    lineSend(text);
   } catch (err) {
     console.log('แจ้งเตือน LINE ไม่สำเร็จ: ' + err);   // ข้อมูลลงชีตแล้ว ไม่ต้องล้มทั้ง request
   }
