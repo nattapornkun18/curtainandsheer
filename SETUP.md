@@ -184,6 +184,23 @@ LINE OA **แผนฟรีส่งได้ 500 ข้อความ/เด�
 
 พอโควตาหมด LINE จะตอบ `429` — **ข้อมูลยังลงชีตครบตามปกติ แค่ไม่มีข้อความเข้า** ไม่มีอะไรพัง
 
+### ขึ้น “You do not have permission to call UrlFetchApp.fetch”
+
+Apps Script ขอสิทธิ์เท่าที่โค้ดตอนนั้นใช้ ตอนอนุญาตครั้งแรกยังไม่มีส่วนส่ง LINE
+พอเพิ่มเข้ามาเลยต้องอนุญาตเพิ่มอีกรอบ (ทำครั้งเดียวจบ)
+
+1. ในหน้า Apps Script เปลี่ยนชื่อฟังก์ชันบนแถบบนจาก `doGet` เป็น **`testLine`**
+2. กด **▶ Run** → **Review permissions** → เลือกบัญชี
+3. หน้าเตือนสีแดง → **Advanced** → **Go to … (unsafe)**
+4. จะมีบรรทัด **“Connect to an external service”** เพิ่มมา → **Allow**
+5. **Deploy → Manage deployments → ✏️ → New version → Deploy** ← ห้ามข้าม
+   ไม่งั้นเมนูในชีตส่งได้ แต่ตอนกดบันทึกจากแอปจะยังเงียบ
+
+**กันไม่ให้เจออีก:** ในไฟล์ [`apps-script/appsscript.json`](apps-script/appsscript.json) ของ repo นี้
+ระบุสิทธิ์ที่ต้องใช้ไว้ครบแล้ว เอาไปวางในโปรเจกต์ได้โดย
+**Project Settings → ติ๊ก “Show appsscript.json manifest file in editor”** แล้ววางทับไฟล์ที่ขึ้นมา
+ทำแบบนี้ Google จะขอสิทธิ์ครบตั้งแต่ครั้งแรก
+
 ### ข้อมูลลงชีตแล้ว แต่ LINE เงียบ — ไล่หาสาเหตุ
 
 ใช้เมนู **Curtain Check → ตรวจสภาพการแจ้งเตือน LINE** จะบอกให้ทีละชั้นว่า token ใช้ได้ไหม
