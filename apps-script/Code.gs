@@ -42,12 +42,12 @@ var LINE_TOKEN = '';
 var LINE_TO = '';
 
 /** จะแจ้งตอนไหน
- *  'update' = เฉพาะตอนแก้ไขห้องที่เคยบันทึกไว้แล้ว และมีอะไรเปลี่ยนจริง  ← ค่าเริ่มต้น
- *  'defect' = เฉพาะห้องที่ผลออกมามีปัญหา (ตรวจครั้งแรกก็แจ้ง)
- *  'all'    = ทุกครั้งที่กดบันทึก
+ *  'all'    = ทุกครั้งที่กดบันทึก — ตรวจครั้งแรกก็แจ้ง แก้ไขก็แจ้งพร้อมบอกจุดที่เปลี่ยน ← ค่าเริ่มต้น
+ *  'update' = เฉพาะตอนแก้ไขห้องที่เคยบันทึกไว้แล้ว และมีอะไรเปลี่ยนจริง
+ *  'defect' = เฉพาะห้องที่ผลออกมามีปัญหา
  *  'off'    = ไม่แจ้งเลย
- *  ตรวจครั้งแรกของห้อง (แถว “รอตรวจ” ที่ยังไม่มีวันที่) ไม่นับเป็นการแก้ไข */
-var NOTIFY_WHEN = 'update';
+ *  ทุกโหมด: บันทึกทับด้วยค่าเดิมเป๊ะ ๆ จะไม่ส่ง กันข้อความกวน */
+var NOTIFY_WHEN = 'all';
 
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
             'manualSheer','manualCurtain','soundSheer','soundCurtain','smooth'];
@@ -276,6 +276,9 @@ function writableSegments(flags) {
 }
 
 function writeRow(sh, at, row, segs) {
+  // บังคับช่องวันที่เป็น "ข้อความ" ก่อนเขียน ไม่งั้นชีตที่ตั้งภาษาอังกฤษ (US)
+  // จะอ่าน 02/08/2026 เป็น 8 ก.พ. แล้ววันที่เพี้ยนสลับวัน-เดือน
+  sh.getRange(at, COL.DATE + 1).setNumberFormat('@');
   segs.forEach(function (seg) {
     sh.getRange(at, seg[0] + 1, 1, seg[1]).setValues([row.slice(seg[0], seg[0] + seg[1])]);
   });
@@ -391,25 +394,41 @@ function roomMessage(r) {
   return lines.join('\n');
 }
 
-/** ส่งทีเดียวหลายห้อง (เช่นกดปุ่ม “ส่งขึ้นชีตทั้งหมด”) ยุบเป็นข้อความเดียว */
-function batchMessage(list) {
-  var bad = list.filter(function (r) { return badPoints(r).length; });
-  var lines = ['📋 อัปเดต ' + list.length + ' ห้อง',
-               'ปกติ ' + (list.length - bad.length) + ' · มีปัญหา ' + bad.length];
-  if (bad.length) {
-    lines.push('');
-    bad.forEach(function (r) {
-      lines.push('🔴 ' + r.room + ' — ' + badPoints(r).join(', ') + (r.note ? ' (' + r.note + ')' : ''));
-    });
-  }
-  var by = list[0] || {};
-  lines.push('', '— ' + (by.by || 'ไม่ระบุผู้ตรวจ') + (by.date ? ' · ' + by.date : ''));
+/** ส่งทีเดียวหลายห้อง (เช่นกดปุ่ม “ส่งขึ้นชีตทั้งหมด”) ยุบเป็นข้อความเดียว
+ *  items = [{type:'update', u:{before,after}} | {type:'new', r:record}] */
+function batchMessage(items) {
+  var lines = ['📋 อัปเดต ' + items.length + ' ห้อง', ''];
+  items.forEach(function (it) {
+    if (it.type === 'update') {
+      var rb = resultOf(it.u.before), ra = resultOf(it.u.after);
+      var d = diffLines(it.u.before, it.u.after).length;
+      lines.push((ra === 'PASS' ? '🟢 ' : '🔴 ') + it.u.after.room + ' ✏️ ' +
+                 (rb === ra ? ra : rb + ' → ' + ra) + (d ? ' · ' + d + ' จุดเปลี่ยน' : ''));
+    } else {
+      var bad = badPoints(it.r).length;
+      lines.push((bad ? '🔴 ' : '🟢 ') + it.r.room + ' ' + resultOf(it.r) +
+                 (bad ? ' · ' + bad + ' จุด' : ''));
+    }
+  });
+  var first = items[0].type === 'update' ? items[0].u.after : items[0].r;
+  lines.push('', '— ' + (first.by || 'ไม่ระบุผู้ตรวจ') + (first.date ? ' · ' + first.date : ''));
   return lines.join('\n');
+}
+
+/** userId/groupId ของ LINE ขึ้นต้นด้วย U (คน) C (กลุ่ม) R (ห้องแชท) ตามด้วยรหัส 32 ตัว
+ *  เอาไว้กันสับสนกับ channel access token ซึ่งยาวกว่ามากและมี + / = ปนอยู่ */
+function looksLikeLineId(v) {
+  return /^[UCR][0-9a-f]{32}$/i.test(String(v || '').trim());
 }
 
 /** ส่งข้อความเข้า LINE — ไม่มี token ก็เงียบไป ไม่ทำให้การบันทึกพัง */
 function lineSend(text) {
   if (!LINE_TOKEN) return false;
+  if (LINE_TO && !looksLikeLineId(LINE_TO)) {
+    throw new Error('LINE_TO ไม่ใช่ userId — ต้องขึ้นต้นด้วย U ตามด้วยรหัส 32 ตัว ' +
+                    '(ถ้าเผลอวาง channel access token ลงไป ให้เว้นว่างหรือเอา Your user ID ' +
+                    'จากแท็บ Basic settings มาใส่แทน)');
+  }
   var url = LINE_TO ? 'https://api.line.me/v2/bot/message/push'
                     : 'https://api.line.me/v2/bot/message/broadcast';
   var payload = {messages:[{type:'text', text:String(text).slice(0, 4900)}]};
@@ -463,20 +482,6 @@ function updateMessage(u) {
   return lines.join('\n');
 }
 
-function updateBatchMessage(list) {
-  var lines = ['✏️ แก้ไข ' + list.length + ' ห้อง', ''];
-  list.forEach(function (u) {
-    var rb = resultOf(u.before), ra = resultOf(u.after);
-    var d = diffLines(u.before, u.after);
-    lines.push((ra === 'PASS' ? '🟢 ' : '🔴 ') + u.after.room + ' — ' +
-               (rb === ra ? ra : rb + ' → ' + ra) +
-               (d.length ? ' (' + d.length + ' จุดเปลี่ยน)' : ''));
-  });
-  var by = list[0].after;
-  lines.push('', '— ' + (by.by || 'ไม่ระบุผู้ตรวจ') + (by.date ? ' · ' + by.date : ''));
-  return lines.join('\n');
-}
-
 /** res = ผลจาก upsert() : {written, updates:[{before, after}]}
  *  เหตุผลที่ไม่ส่งจะถูก log ไว้ ดูได้ที่ Apps Script → Executions */
 function notify(res) {
@@ -485,25 +490,34 @@ function notify(res) {
   if (!res) return;
   try {
     var updates = res.updates || [];
-    var text = null;
+    var byRoom = {};
+    updates.forEach(function (u) { byRoom[u.after.room] = u; });
+
+    // แยกว่าห้องไหนเป็นการแก้ไข ห้องไหนเป็นการตรวจครั้งแรก
+    var items = [];
+    (res.all || []).forEach(function (r) {
+      if (!r || !Number(r.room)) return;
+      var u = byRoom[r.room];
+      if (u) { if (changed(u)) items.push({type:'update', u:u}); }   // ทับค่าเดิม = ไม่กวน
+      else items.push({type:'new', r:r});
+    });
 
     if (NOTIFY_WHEN === 'update') {
-      if (!updates.length) {
-        console.log('ไม่ส่ง LINE: ห้องที่บันทึกยังไม่เคยมีข้อมูลมาก่อน (นับเป็นการตรวจครั้งแรก)');
-        return;
-      }
-      var real = updates.filter(changed);              // บันทึกซ้ำโดยไม่เปลี่ยนอะไร = ไม่กวน
-      if (!real.length) {
-        console.log('ไม่ส่ง LINE: บันทึกทับด้วยค่าเดิม ไม่มีอะไรเปลี่ยน');
-        return;
-      }
-      text = real.length === 1 ? updateMessage(real[0]) : updateBatchMessage(real);
-    } else {
-      var list = (res.all || []).filter(function (r) { return r && Number(r.room); });
-      if (NOTIFY_WHEN === 'defect') list = list.filter(function (r) { return badPoints(r).length; });
-      if (!list.length) { console.log('ไม่ส่ง LINE: ไม่มีห้องที่เข้าเงื่อนไข'); return; }
-      text = list.length === 1 ? roomMessage(list[0]) : batchMessage(list);
+      items = items.filter(function (it) { return it.type === 'update'; });
+    } else if (NOTIFY_WHEN === 'defect') {
+      items = items.filter(function (it) {
+        return badPoints(it.type === 'update' ? it.u.after : it.r).length;
+      });
     }
+
+    if (!items.length) {
+      console.log('ไม่ส่ง LINE: ไม่มีห้องที่เข้าเงื่อนไขของโหมด ' + NOTIFY_WHEN +
+                  ' (บันทึกทับด้วยค่าเดิม หรือเป็นการตรวจครั้งแรกในโหมด update)');
+      return;
+    }
+    var text = items.length > 1 ? batchMessage(items)
+             : items[0].type === 'update' ? updateMessage(items[0].u)
+             : roomMessage(items[0].r);
     lineSend(text);
     console.log('ส่ง LINE แล้ว');
   } catch (err) {
@@ -577,7 +591,16 @@ function lineDiag() {
   out.push('');
   out.push('โหมดแจ้งเตือน: ' + NOTIFY_WHEN +
            (NOTIFY_WHEN === 'update' ? '  (แจ้งเฉพาะตอนแก้ห้องที่เคยบันทึกแล้ว และค่าต้องเปลี่ยนจริง)' : ''));
-  out.push('ปลายทาง: ' + (LINE_TO ? LINE_TO : 'ทุกคนที่เป็นเพื่อนกับ OA'));
+  if (!LINE_TO) {
+    out.push('ปลายทาง: ทุกคนที่เป็นเพื่อนกับ OA (broadcast)');
+  } else if (looksLikeLineId(LINE_TO)) {
+    out.push('ปลายทาง: ' + LINE_TO.slice(0, 8) + '…  (ส่งเจาะจง)');
+  } else {
+    out.push('❌ LINE_TO ผิดรูปแบบ — ส่งไม่ออกแน่นอน');
+    out.push('   ต้องเป็น userId ขึ้นต้นด้วย U ตามด้วยรหัส 32 ตัว');
+    out.push('   เอามาจาก LINE Developers → แท็บ Basic settings → ล่างสุด "Your user ID"');
+    out.push('   หรือเว้นว่างไว้ถ้าอยากส่งหาทุกคนที่เพิ่มเพื่อน');
+  }
   out.push('');
   out.push('ถ้าทุกอย่างข้างบนเขียว แต่กดบันทึกในแอปแล้วไม่มีข้อความ');
   out.push('= ยังไม่ได้ Deploy เวอร์ชันใหม่ (Deploy → Manage deployments → ✏️ → New version)');
