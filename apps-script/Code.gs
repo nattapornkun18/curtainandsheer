@@ -477,24 +477,35 @@ function updateBatchMessage(list) {
   return lines.join('\n');
 }
 
-/** res = ผลจาก upsert() : {written, updates:[{before, after}]} */
+/** res = ผลจาก upsert() : {written, updates:[{before, after}]}
+ *  เหตุผลที่ไม่ส่งจะถูก log ไว้ ดูได้ที่ Apps Script → Executions */
 function notify(res) {
-  if (!LINE_TOKEN || NOTIFY_WHEN === 'off' || !res) return;
+  if (!LINE_TOKEN) { console.log('ไม่ส่ง LINE: ยังไม่ได้ใส่ LINE_TOKEN'); return; }
+  if (NOTIFY_WHEN === 'off') { console.log('ไม่ส่ง LINE: NOTIFY_WHEN = off'); return; }
+  if (!res) return;
   try {
     var updates = res.updates || [];
     var text = null;
 
     if (NOTIFY_WHEN === 'update') {
+      if (!updates.length) {
+        console.log('ไม่ส่ง LINE: ห้องที่บันทึกยังไม่เคยมีข้อมูลมาก่อน (นับเป็นการตรวจครั้งแรก)');
+        return;
+      }
       var real = updates.filter(changed);              // บันทึกซ้ำโดยไม่เปลี่ยนอะไร = ไม่กวน
-      if (!real.length) return;
+      if (!real.length) {
+        console.log('ไม่ส่ง LINE: บันทึกทับด้วยค่าเดิม ไม่มีอะไรเปลี่ยน');
+        return;
+      }
       text = real.length === 1 ? updateMessage(real[0]) : updateBatchMessage(real);
     } else {
       var list = (res.all || []).filter(function (r) { return r && Number(r.room); });
       if (NOTIFY_WHEN === 'defect') list = list.filter(function (r) { return badPoints(r).length; });
-      if (!list.length) return;
+      if (!list.length) { console.log('ไม่ส่ง LINE: ไม่มีห้องที่เข้าเงื่อนไข'); return; }
       text = list.length === 1 ? roomMessage(list[0]) : batchMessage(list);
     }
     lineSend(text);
+    console.log('ส่ง LINE แล้ว');
   } catch (err) {
     console.log('แจ้งเตือน LINE ไม่สำเร็จ: ' + err);   // ข้อมูลลงชีตแล้ว ไม่ต้องล้มทั้ง request
   }
@@ -508,7 +519,70 @@ function onOpen() {
     .addItem('เช็คว่าสคริปต์อ่านแท็บไหน', 'whereAmI')
     .addItem('รวมแถวซ้ำ ให้เหลือห้องละแถว', 'dedupeRooms')
     .addItem('ทดสอบส่งแจ้งเตือน LINE', 'testLine')
+    .addItem('ตรวจสภาพการแจ้งเตือน LINE', 'lineDiag')
     .addToUi();
+}
+
+function lineGet(path) {
+  var res = UrlFetchApp.fetch('https://api.line.me' + path, {
+    method: 'get',
+    headers: {Authorization: 'Bearer ' + LINE_TOKEN},
+    muteHttpExceptions: true
+  });
+  return {code: res.getResponseCode(), body: res.getContentText()};
+}
+
+/** ไล่เช็คทีละชั้นว่าติดตรงไหน — token, โควตา, คนรับ, และโหมดแจ้งเตือน */
+function lineDiag() {
+  var ui = SpreadsheetApp.getUi(), out = [];
+  if (!LINE_TOKEN) {
+    ui.alert('ตรวจสภาพ LINE', 'ยังไม่ได้ใส่ LINE_TOKEN ใน Code.gs', ui.ButtonSet.OK);
+    return;
+  }
+
+  var info = lineGet('/v2/bot/info');
+  if (info.code !== 200) {
+    out.push('❌ token ใช้ไม่ได้ (HTTP ' + info.code + ')');
+    out.push(info.body);
+    out.push('');
+    out.push('401 = token ผิด/คัดลอกไม่ครบ · 403 = ยังไม่ได้เปิด Messaging API');
+    ui.alert('ตรวจสภาพ LINE', out.join('\n'), ui.ButtonSet.OK);
+    return;
+  }
+  var b = JSON.parse(info.body);
+  out.push('✅ token ใช้ได้');
+  out.push('บัญชี: ' + (b.displayName || '-') + '  ' + (b.basicId || ''));
+
+  var q = lineGet('/v2/bot/message/quota');
+  var c = lineGet('/v2/bot/message/quota/consumption');
+  if (q.code === 200 && c.code === 200) {
+    var qj = JSON.parse(q.body), cj = JSON.parse(c.body);
+    var limit = (qj.type === 'limited' && qj.value) ? qj.value : 'ไม่จำกัด';
+    out.push('โควตาเดือนนี้: ใช้ไป ' + cj.totalUsage + ' / ' + limit);
+    if (qj.type === 'limited' && qj.value && cj.totalUsage >= qj.value) {
+      out.push('⚠️ โควตาหมดแล้ว — ส่งไม่ออกจนกว่าจะขึ้นเดือนใหม่');
+    }
+  }
+
+  var f = lineGet('/v2/bot/followers/ids?limit=100');
+  if (f.code === 200) {
+    var ids = (JSON.parse(f.body).userIds || []).length;
+    out.push(ids ? '✅ มีคนเพิ่มเพื่อนแล้ว ' + ids + ' คน'
+                 : '❌ ยังไม่มีใครเพิ่ม OA เป็นเพื่อน — ส่งไปก็ไม่มีคนรับ');
+  } else {
+    out.push('เช็คจำนวนเพื่อนไม่ได้ (HTTP ' + f.code + ' — บัญชีที่ยังไม่รับรองจะเช็คไม่ได้)');
+    out.push('ให้เช็คเองว่าสแกน QR เพิ่ม OA เป็นเพื่อนแล้วหรือยัง');
+  }
+
+  out.push('');
+  out.push('โหมดแจ้งเตือน: ' + NOTIFY_WHEN +
+           (NOTIFY_WHEN === 'update' ? '  (แจ้งเฉพาะตอนแก้ห้องที่เคยบันทึกแล้ว และค่าต้องเปลี่ยนจริง)' : ''));
+  out.push('ปลายทาง: ' + (LINE_TO ? LINE_TO : 'ทุกคนที่เป็นเพื่อนกับ OA'));
+  out.push('');
+  out.push('ถ้าทุกอย่างข้างบนเขียว แต่กดบันทึกในแอปแล้วไม่มีข้อความ');
+  out.push('= ยังไม่ได้ Deploy เวอร์ชันใหม่ (Deploy → Manage deployments → ✏️ → New version)');
+
+  ui.alert('ตรวจสภาพ LINE', out.join('\n'), ui.ButtonSet.OK);
 }
 
 function testLine() {
