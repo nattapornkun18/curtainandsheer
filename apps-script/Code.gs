@@ -49,6 +49,20 @@ var LINE_TO = '';
  *  ทุกโหมด: บันทึกทับด้วยค่าเดิมเป๊ะ ๆ จะไม่ส่ง กันข้อความกวน */
 var NOTIFY_WHEN = 'all';
 
+/* ===================== รูปถ่ายแนบ =====================
+   รูปเก็บใน Google Drive ของเจ้าของสคริปต์ แล้ววางลิงก์ไว้ในชีต
+   ปิดใช้งานได้โดยตั้ง PHOTO_COL = '' */
+
+/** คอลัมน์ที่ใช้เก็บลิงก์รูป — ต้องเป็นคอลัมน์ว่างที่อยู่ถัดจากคอลัมน์ของเจ้าของชีต
+ *  (ตารางนี้ใช้ A–S สำหรับแอป และ T–V เป็นของเจ้าของ จึงเริ่มที่ W) */
+var PHOTO_COL = 'W';
+
+/** ชื่อโฟลเดอร์ใน Drive ที่จะเก็บรูป (สร้างให้อัตโนมัติครั้งแรก) */
+var PHOTO_FOLDER = 'Curtain Check Photos';
+
+/** แนบได้สูงสุดกี่รูปต่อการบันทึกหนึ่งครั้ง */
+var MAX_PHOTOS = 3;
+
 var KEYS = ['closeSheer','closeCurtain','openSheer','openCurtain','switchSheer','switchCurtain',
             'manualSheer','manualCurtain','soundSheer','soundCurtain','smooth'];
 
@@ -243,10 +257,12 @@ function readAll() {
   var sh = sheet(), lay = layout(sh), last = sh.getLastRow();
   if (last < lay.start) return [];
   var values = sh.getRange(lay.start, 1, last - lay.start + 1, WIDTH).getValues();
+  var photos = readPhotoColumn(sh, lay.start, values.length);
   var latest = {}, rank = {};
   values.forEach(function (row, i) {
     if (!Number(row[COL.ROOM])) return;
     var rec = rowToRecord(row);
+    if (photos[i] && photos[i].length) rec.photoUrls = photos[i];
     var d = dateRank(row[COL.DATE]);
     if (!(rec.room in latest) || d > rank[rec.room]) { latest[rec.room] = rec; rank[rec.room] = d; }
   });
@@ -348,6 +364,15 @@ function upsert(recs) {
       updates.push({before: snapshot[k], after: byRec[k]});       // ห้องนี้เคยบันทึกไว้แล้ว
     }
     writeRow(sh, at, byRow[k], segs);
+    try {                                                        // รูปพลาดไม่ทำให้ข้อมูลหาย
+      var urls = savePhotos(byRec[k]);
+      if (urls.length) {
+        writePhotos(sh, at, urls);
+        byRec[k].photoUrls = urls;
+      }
+    } catch (err) {
+      console.log('อัปรูปไม่สำเร็จ ห้อง ' + k + ': ' + err);
+    }
     index[k] = at;
   });
   return {
@@ -372,6 +397,76 @@ function remove(roomNo, date) {
   return kill.length;
 }
 
+/* ============================ รูปถ่ายแนบ ============================ */
+
+/** 'W' → 23 (เลขคอลัมน์แบบ 1-based) · คืน 0 ถ้าปิดใช้งาน */
+function photoColIndex() {
+  var s = String(PHOTO_COL || '').trim().toUpperCase();
+  if (!/^[A-Z]{1,3}$/.test(s)) return 0;
+  var n = 0;
+  for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+  return n <= WIDTH ? 0 : n;              // ห้ามทับคอลัมน์ A–S ที่แอปใช้อยู่
+}
+
+/** โฟลเดอร์เก็บรูป — จำ id ไว้ใน Script Properties จะได้ไม่สร้างซ้ำ */
+function photoFolder() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('PHOTO_FOLDER_ID');
+  if (id) {
+    try { return DriveApp.getFolderById(id); } catch (err) { /* โดนลบไป สร้างใหม่ */ }
+  }
+  var folder = DriveApp.createFolder(PHOTO_FOLDER);
+  props.setProperty('PHOTO_FOLDER_ID', folder.getId());
+  return folder;
+}
+
+/** อัปรูป (data URL จากมือถือ) ขึ้น Drive คืนลิงก์ */
+function savePhotos(rec) {
+  var list = (rec && rec.photos) || [];
+  if (!list.length || !photoColIndex()) return [];
+  var folder = photoFolder(), urls = [];
+  list.slice(0, MAX_PHOTOS).forEach(function (data, i) {
+    var s = String(data || '');
+    if (s.indexOf('data:image') !== 0 || s.indexOf(',') < 0) return;
+    var head = s.substring(0, s.indexOf(','));
+    var mime = head.replace('data:', '').replace(';base64', '') || 'image/jpeg';
+    var ext = mime.indexOf('png') >= 0 ? 'png' : 'jpg';
+    var name = rec.room + '_' + String(rec.date || '').replace(/\//g, '-') + '_' + (i + 1) + '.' + ext;
+    var blob = Utilities.newBlob(Utilities.base64Decode(s.substring(s.indexOf(',') + 1)), mime, name);
+    urls.push(folder.createFile(blob).getUrl());
+  });
+  return urls;
+}
+
+/** วางลิงก์ต่อท้ายของเดิมในคอลัมน์รูป — ไม่เคยลบลิงก์เก่าทิ้ง */
+function writePhotos(sh, at, urls) {
+  var c = photoColIndex();
+  if (!c || !urls.length) return;
+  var head = sh.getRange(1, c);
+  var label = String(head.getValue() || '').trim();
+  if (!label) head.setValue('รูปถ่าย').setFontWeight('bold');
+  else if (label !== 'รูปถ่าย') {
+    throw new Error('คอลัมน์ ' + PHOTO_COL + ' มีข้อมูลอื่นอยู่แล้ว ("' + label +
+                    '") — เปลี่ยน PHOTO_COL ใน Code.gs ไปใช้คอลัมน์ว่างแทน');
+  }
+  var cell = sh.getRange(at, c);
+  var old = String(cell.getValue() || '').trim();
+  cell.setValue((old ? old + '\n' : '') + urls.join('\n')).setWrap(true);
+}
+
+function splitPhotos(cellValue) {
+  return String(cellValue || '')
+           .split('\n').map(function (x) { return x.trim(); })
+           .filter(function (x) { return /^https?:\/\//.test(x); });
+}
+
+/** อ่านคอลัมน์รูปทั้งก้อนทีเดียว (list ถูกเรียกทุก 15 วิ อ่านทีละแถวจะช้ามาก) */
+function readPhotoColumn(sh, from, rows) {
+  var c = photoColIndex();
+  if (!c || rows < 1) return [];
+  return sh.getRange(from, c, rows, 1).getValues().map(function (r) { return splitPhotos(r[0]); });
+}
+
 /* ============================ แจ้งเตือน LINE ============================ */
 
 /** จุดที่ไม่ปกติของห้องนั้น เช่น ["สวิตช์ ม่านทึบ: bad", "ปิด ม่านโปร่ง: ปิดไม่ได้ เหลือครึ่งทาง"] */
@@ -384,12 +479,18 @@ function badPoints(r) {
   return out;
 }
 
+function photoLines(r) {
+  var urls = (r && r.photoUrls) || [];
+  return urls.length ? ['📷 รูปแนบ ' + urls.length + ' รูป'].concat(urls) : [];
+}
+
 function roomMessage(r) {
   var bad = badPoints(r);
   var lines = [(bad.length ? '🔴 ' : '🟢 ') + r.room + (r.type ? ' · ' + r.type : '')];
   lines.push(bad.length ? 'พบปัญหา ' + bad.length + ' จุด' : 'ปกติทุกหัวข้อ');
   bad.forEach(function (b) { lines.push('• ' + b); });
   if (r.note) lines.push('📝 ' + r.note);
+  photoLines(r).forEach(function (l) { lines.push(l); });
   lines.push('— ' + (r.by || 'ไม่ระบุผู้ตรวจ') + (r.date ? ' · ' + r.date : ''));
   return lines.join('\n');
 }
@@ -477,6 +578,7 @@ function updateMessage(u) {
   if (String(b.note || '') !== String(a.note || '')) {
     lines.push('📝 ' + (b.note || '(ว่าง)') + ' → ' + (a.note || '(ว่าง)'));
   }
+  photoLines(a).forEach(function (l) { lines.push(l); });
   lines.push('— ' + (a.by || 'ไม่ระบุผู้ตรวจ') + (a.date ? ' · ' + a.date : '') +
              (b.date && b.date !== a.date ? ' (ตรวจครั้งก่อน ' + b.date + ')' : ''));
   return lines.join('\n');

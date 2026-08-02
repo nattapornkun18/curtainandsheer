@@ -211,6 +211,22 @@
   .pad button:disabled{opacity:.4}
   .lockbtn{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);background:none;
            border-radius:9px;color:var(--mute);font-family:var(--sans);font-size:12px;cursor:pointer}
+
+  /* ---------- รูปถ่ายแนบ ---------- */
+  .photobar{display:flex;align-items:center;gap:8px;margin-top:9px}
+  .photobtn{flex:1;padding:11px;border:1px dashed var(--line);background:var(--paper);border-radius:9px;
+            font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
+  .photobtn:active{background:#DCE3EB}
+  .photobtn:disabled{opacity:.45;cursor:default}
+  .shots{display:flex;flex-wrap:wrap;gap:8px;margin-top:9px}
+  .shot{position:relative;width:64px;height:64px;border-radius:8px;overflow:hidden;
+        border:1px solid var(--line);background:var(--paper);flex:none}
+  .shot img{width:100%;height:100%;object-fit:cover;display:block}
+  .shot button{position:absolute;top:2px;right:2px;width:20px;height:20px;border:0;border-radius:50%;
+               background:rgba(20,28,40,.78);color:#fff;font-size:13px;line-height:1;cursor:pointer;padding:0}
+  .shot.link{display:flex;align-items:center;justify-content:center;text-decoration:none;
+             font-size:11px;font-weight:600;color:var(--brass);text-align:center;line-height:1.3}
+  .shot.up{display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--mute)}
 </style>
 
 <div class="wrap">
@@ -317,7 +333,14 @@
 
     <div class="sec">
       <h2>หมายเหตุ / รายละเอียด defect</h2>
-      <div class="item"><textarea id="note" placeholder="เช่น sheer ปิดไม่สนิทเหลือ ~5 ซม. / สวิตช์ curtain กดแล้วไม่ทำงาน"></textarea></div>
+      <div class="item">
+        <textarea id="note" placeholder="เช่น sheer ปิดไม่สนิทเหลือ ~5 ซม. / สวิตช์ curtain กดแล้วไม่ทำงาน"></textarea>
+        <div class="photobar">
+          <button class="photobtn" id="shotBtn">📷 ถ่ายรูป / เลือกรูปแนบ</button>
+          <input type="file" id="shotInput" accept="image/*" capture="environment" multiple hidden>
+        </div>
+        <div class="shots" id="shots"></div>
+      </div>
     </div>
   </div>
 
@@ -447,17 +470,25 @@ const POLL_MS = 15000;
 const PIN_LEN = 3;
 const APP_PIN = "";
 
+/* ---------- รูปถ่ายแนบ ----------
+   บีบรูปในเครื่องก่อนส่งเสมอ รูปจากมือถือ 4 MB จะเหลือราว 200 KB
+   ถ้าไม่บีบ Apps Script จะรับไม่ไหวและ localStorage เต็มตอนออฟไลน์ */
+const PHOTO_MAX = 3;          // แนบได้กี่รูปต่อการบันทึกหนึ่งครั้ง
+const PHOTO_SIDE = 1280;      // ด้านยาวสุดหลังย่อ (px)
+const PHOTO_Q = 0.7;          // คุณภาพ JPEG
+
 let floor = 3, unit = 1, brand = "Dooya", inspector = "";
 let checks = {}, note = "", records = [], memory = null;
 let cfg = {url:SHEET_WEBAPP_URL, token:SHEET_TOKEN};
 let outbox = [], syncState = "off", syncMsg = "";
 let pulling = false, flushing = false, pollTimer = null;
 let unlocked = false, pinBuf = "";
+let shots = [];               // รูปที่เพิ่งถ่าย ยังไม่ได้บันทึก (อยู่ในหน่วยความจำเท่านั้น)
 
 /* ---------- storage ---------- */
 const LS = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
-  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
+  set(k,v){ try{ localStorage.setItem(k,v); return true; }catch(e){ return false; } },
   del(k){ try{ localStorage.removeItem(k); }catch(e){} }
 };
 async function load(){
@@ -503,7 +534,12 @@ function loadCfg(){
 }
 function saveCfg(){ LS.set(CFG_KEY, JSON.stringify(cfg)); }
 function loadOutbox(){ try{ outbox = JSON.parse(LS.get(OUT_KEY)||"[]"); }catch(e){ outbox = []; } }
-function saveOutbox(){ LS.set(OUT_KEY, JSON.stringify(outbox)); }
+function saveOutbox(){
+  // คิวที่มีรูปแนบอาจใหญ่จนเกินโควตา localStorage — ต้องรู้ตัว ไม่ใช่เงียบแล้วข้อมูลหาย
+  if(!LS.set(OUT_KEY, JSON.stringify(outbox)) && outbox.length){
+    toast("ที่เก็บในเครื่องเต็ม — อย่าปิดแอปจนกว่าจะส่งขึ้นชีตเสร็จ");
+  }
+}
 
 function setSync(state, msg){
   syncState = state; syncMsg = msg||"";
@@ -588,7 +624,10 @@ function mergeRemote(remote){
   // ห้องที่ยังไม่เคยขึ้นชีตเลย เก็บไว้ก่อน (ห้องที่ขึ้นไปแล้วให้ยึดตามชีต)
   records.forEach(r=>{ if(!r.synced && !map.has(r.room)) map.set(r.room, r); });
   outbox.forEach(op=>{                                            // ของที่ยังค้างในคิวชนะเสมอ
-    if(op.action==="upsert") (op.records||[]).forEach(r=>map.set(r.room, r));
+    if(op.action==="upsert") (op.records||[]).forEach(r=>{
+      const {photos, ...rest} = r;                                // base64 อยู่ในคิวพอ ไม่ต้องลง records
+      map.set(r.room, rest);
+    });
     else if(op.action==="delete") map.delete(op.room);
   });
   records = [...map.values()].sort((a,b)=>a.room-b.room);
@@ -605,6 +644,61 @@ function startPolling(){
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") pull(); });
 window.addEventListener("online",  ()=>{ flush(); pull(); });
 window.addEventListener("offline", ()=> setSync("err","ออฟไลน์ — ข้อมูลถูกเก็บไว้ในเครื่องก่อน"));
+
+/* ================= รูปถ่ายแนบ ================= */
+const shotsEl = document.getElementById("shots");
+const shotInput = document.getElementById("shotInput");
+
+/** ย่อ + บีบเป็น JPEG แล้วคืนเป็น data URL */
+function shrink(file){
+  return new Promise((ok, no)=>{
+    const fr = new FileReader();
+    fr.onerror = () => no(new Error("อ่านไฟล์ไม่ได้"));
+    fr.onload = () => {
+      const img = new Image();
+      img.onerror = () => no(new Error("ไฟล์นี้ไม่ใช่รูป"));
+      img.onload = () => {
+        const s = Math.min(1, PHOTO_SIDE / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        ok(c.toDataURL("image/jpeg", PHOTO_Q));
+      };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+function renderShots(){
+  const rec = recOf(room());
+  const saved = (rec && rec.photoUrls) || [];
+  const total = saved.length + shots.length;
+  shotsEl.innerHTML =
+    saved.map((u,i)=>`<a class="shot link" href="${u}" target="_blank" rel="noopener">รูปที่<br>${i+1}</a>`).join("") +
+    shots.map((d,i)=>`<div class="shot"><img src="${d}" alt=""><button data-i="${i}" aria-label="ลบรูป">✕</button></div>`).join("");
+  const btn = document.getElementById("shotBtn");
+  btn.disabled = shots.length >= PHOTO_MAX;
+  btn.textContent = shots.length >= PHOTO_MAX ? `📷 ครบ ${PHOTO_MAX} รูปแล้ว`
+                  : shots.length ? `📷 เพิ่มรูป (${shots.length}/${PHOTO_MAX})`
+                  : total ? "📷 ถ่ายรูปเพิ่ม" : "📷 ถ่ายรูป / เลือกรูปแนบ";
+}
+
+document.getElementById("shotBtn").onclick = ()=> shotInput.click();
+shotsEl.onclick = e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  shots.splice(+b.dataset.i, 1); renderShots();
+};
+shotInput.onchange = async e=>{
+  const files = [...e.target.files].slice(0, PHOTO_MAX - shots.length);
+  e.target.value = "";
+  for(const f of files){
+    try{ shots.push(await shrink(f)); }
+    catch(err){ toast("แนบรูปไม่ได้: " + (err.message||err)); }
+  }
+  renderShots();
+  if(shots.length) toast(`แนบแล้ว ${shots.length} รูป — กดบันทึกเพื่อส่งขึ้นชีต`);
+};
 
 /* ================= หน้าล็อก (รหัสผ่าน) ================= */
 const lockEl = document.getElementById("lock");
@@ -781,6 +875,7 @@ function render(){
     g.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", checks[k]===b.dataset.v));
   });
   document.getElementById("note").value = note;
+  renderShots();
 
   const v = verdict(checks);
   const led = document.getElementById("led");
@@ -878,6 +973,7 @@ function loadRoom(){
   const r = recOf(room());
   checks = r ? {...r.checks} : {};
   note = r ? r.note : "";
+  shots = [];                       // เปลี่ยนห้อง = ทิ้งรูปที่ยังไม่ได้บันทึก
   render();
 }
 document.getElementById("save").onclick = ()=>{
@@ -885,10 +981,14 @@ document.getElementById("save").onclick = ()=>{
   const rec = {date:today(), floor, room:room(), type:TYPE[unit], brand,
                checks:{...checks}, result:v.s, note, by:inspector,
                updatedAt:Date.now(), synced:false};
+  const old = recOf(rec.room);
+  if(old && old.photoUrls) rec.photoUrls = old.photoUrls;   // ลิงก์รูปเดิมไม่หาย
   const i = records.findIndex(x=>x.room===rec.room);
   if(i>=0) records[i]=rec; else records.push(rec);
   persist();
-  queue({action:"upsert", records:[rec]});
+  // รูป (base64) ใส่เฉพาะในคิวที่จะส่ง ไม่เก็บใน records กัน localStorage เต็ม
+  queue({action:"upsert", records:[shots.length ? {...rec, photos:[...shots]} : rec]});
+  if(shots.length) shots = [];
   toast(v.s==="PASS" ? `${rec.room} ผ่าน — ไปห้องถัดไป` : `${rec.room} มีปัญหา ${v.n} จุด`);
   if(unit<12){ unit++; } else if(floor<20){ floor++; unit=1; }
   loadRoom();
