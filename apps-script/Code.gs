@@ -41,6 +41,11 @@ var LINE_TOKEN = '';
  *  ใส่ userId / groupId ถ้าอยากส่งเจาะจงคนเดียวหรือกลุ่มเดียว */
 var LINE_TO = '';
 
+/** หัวข้อความ ใช้แยกว่าข้อความมาจากโปรเจกต์ไหน
+ *  ส่งเข้า LINE OA เดียวกันหลายโปรเจกต์ ต้องตั้งให้ต่างกัน
+ *  เว้นว่าง = ไม่ขึ้นหัว */
+var APP_TAG = '[Curtain & Sheer]';
+
 /** จะแจ้งตอนไหน
  *  'all'    = ทุกครั้งที่กดบันทึก — ตรวจครั้งแรกก็แจ้ง แก้ไขก็แจ้งพร้อมบอกจุดที่เปลี่ยน ← ค่าเริ่มต้น
  *  'update' = เฉพาะตอนแก้ไขห้องที่เคยบันทึกไว้แล้ว และมีอะไรเปลี่ยนจริง
@@ -532,7 +537,8 @@ function lineSend(text) {
   }
   var url = LINE_TO ? 'https://api.line.me/v2/bot/message/push'
                     : 'https://api.line.me/v2/bot/message/broadcast';
-  var payload = {messages:[{type:'text', text:String(text).slice(0, 4900)}]};
+  var body = APP_TAG ? APP_TAG + '\n' + text : String(text);
+  var payload = {messages:[{type:'text', text:body.slice(0, 4900)}]};
   if (LINE_TO) payload.to = LINE_TO;
   var res = UrlFetchApp.fetch(url, {
     method: 'post',
@@ -691,6 +697,7 @@ function lineDiag() {
   }
 
   out.push('');
+  out.push('หัวข้อความ: ' + (APP_TAG || '(ไม่ขึ้นหัว)'));
   out.push('โหมดแจ้งเตือน: ' + NOTIFY_WHEN +
            (NOTIFY_WHEN === 'update' ? '  (แจ้งเฉพาะตอนแก้ห้องที่เคยบันทึกแล้ว และค่าต้องเปลี่ยนจริง)' : ''));
   if (!LINE_TO) {
