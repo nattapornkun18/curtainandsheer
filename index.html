@@ -1,397 +1,399 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>เช็คห้อง · Hotel Room Check</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
-
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --ink:#141C28; --ink-2:#26313F; --mute:#6B7A8D;
-    --paper:#E9EDF2; --card:#FFFFFF; --line:#D6DDE6;
-    --brass:#B8862B; --brass-soft:#F3E7CC;
-    --ok:#1B7A4C; --ok-soft:#DCF0E5;
-    --warn:#B26A0A; --warn-soft:#FBEBD2;
-    --bad:#B62D22; --bad-soft:#FADEDB;
-    --r:10px;
-    --sans:"IBM Plex Sans Thai","Noto Sans Thai",Tahoma,system-ui,sans-serif;
-    --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
+    --bg:#EEF2F1; --card:#fff; --ink:#0F1E1D; --mid:#3E4C4B; --soft:#7B8886;
+    --line:#DFE5E3; --seal:#14605A; --gold:#C79A3E;
+    --dark:#16211F; --dark2:#1E2C2A;
+    --pass:#1B7A4B; --near:#B8862B; --fail:#B23C31; --skip:#6B7877;
+    --pass-s:#E2F0E9; --near-s:#F7EEDC; --fail-s:#F7E2DF; --skip-s:#E7ECEB;
+    --sans:"IBM Plex Sans Thai",system-ui,sans-serif;
+    --disp:"Chakra Petch",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,monospace;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  body{margin:0;background:var(--paper);font-family:var(--sans);color:var(--ink);
-       font-size:15px;line-height:1.45;padding-bottom:96px}
-  .wrap{max-width:520px;margin:0 auto}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+       font-size:15px;line-height:1.55}
+  .app{max-width:760px;margin:0 auto;min-height:100vh;padding-bottom:20px}
+  button{font-family:inherit;cursor:pointer}
+  .hide{display:none !important}
 
-  /* ---------- top bar ---------- */
-  .bar{position:sticky;top:0;z-index:20;background:var(--ink);color:#fff;
-       padding:10px 14px;display:flex;align-items:center;gap:8px}
-  .bar h1{font-size:14px;font-weight:600;letter-spacing:.02em;margin:0;flex:1;min-width:0;
-          overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .bar .brasstick{width:3px;height:20px;background:var(--brass);border-radius:2px;flex:none}
-  .bar input{background:transparent;border:0;border-bottom:1px solid #44515F;color:#fff;
-             font-family:var(--sans);font-size:13px;width:72px;padding:2px 0;text-align:right;flex:none}
-  .bar input::placeholder{color:#7B8899}
-  .bar input:focus{outline:none;border-bottom-color:var(--brass)}
+  /* ---------- topbar ---------- */
+  .topbar{position:sticky;top:0;z-index:30;background:var(--dark);color:#fff;
+    padding:12px 14px;display:flex;align-items:center;gap:10px;border-left:5px solid var(--gold)}
+  .topbar h1{font-family:var(--disp);font-size:15.5px;font-weight:600;margin:0;
+    letter-spacing:.02em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar h1 small{display:block;font-family:var(--sans);font-size:11px;font-weight:400;color:#8FA39E}
+  .back{background:none;border:0;color:#BFD3CB;font-size:20px;line-height:1;padding:4px 6px 4px 0}
+  .sync{display:flex;align-items:center;gap:6px;background:#26332F;border:0;border-radius:20px;
+    padding:6px 11px;color:#9AB0A9;font-size:11px;font-weight:600;flex:none}
+  .sync i{width:7px;height:7px;border-radius:50%;background:#7B8899;display:block}
+  .sync.ok{color:#CFE9DA} .sync.ok i{background:#3FBF7F}
+  .sync.busy{color:#F0DFBC} .sync.busy i{background:var(--gold);animation:blink 1s infinite}
+  .sync.err{color:#F2C0BB} .sync.err i{background:#E4695E}
+  @keyframes blink{50%{opacity:.25}}
 
-  .tabs{display:flex;background:var(--ink-2)}
-  .tabs button{flex:1;background:none;border:0;color:#9AA7B6;font-family:var(--sans);
-               font-size:13px;font-weight:600;padding:11px 0;border-bottom:2px solid transparent;cursor:pointer}
-  .tabs button[aria-selected="true"]{color:#fff;border-bottom-color:var(--brass)}
+  .pane{padding:14px 14px 40px}
 
-  /* ---------- door tag ---------- */
-  .tag{background:var(--card);margin:12px;border-radius:var(--r);
-       border:1px solid var(--line);border-left:5px solid var(--brass);overflow:hidden}
-  .tag-top{display:flex;align-items:center;gap:14px;padding:14px 16px}
-  .plate{font-family:var(--mono);font-size:40px;font-weight:700;letter-spacing:-.02em;line-height:1}
-  .tag-meta{flex:1;min-width:0}
-  .rtype{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--brass)}
-  .rsub{font-size:12px;color:var(--mute)}
-  .led{width:14px;height:14px;border-radius:50%;background:var(--line);flex:none;
-       box-shadow:0 0 0 3px #fff,0 0 0 4px var(--line)}
-  .led.ok{background:var(--ok);box-shadow:0 0 0 3px #fff,0 0 0 4px var(--ok)}
-  .led.bad{background:var(--bad);box-shadow:0 0 0 3px #fff,0 0 0 4px var(--bad)}
+  /* ---------- who / date ---------- */
+  .who{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;display:flex;gap:12px;flex-wrap:wrap}
+  .who .f{flex:1;min-width:150px}
+  .who label{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--soft);margin-bottom:5px}
+  .who input{width:100%;font-family:inherit;font-size:14.5px;padding:9px 11px;
+    border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+  .who input:focus{outline:2px solid var(--gold);outline-offset:-1px}
+  .who .dsh{font-size:11.5px;color:var(--soft);margin-top:5px;font-family:var(--mono)}
+  .who .warn{color:var(--fail);font-weight:600}
 
-  .picker{border-top:1px solid var(--line);padding:10px 12px 12px}
-  .prow{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-  .prow .lab{font-size:12px;color:var(--mute);width:34px;flex:none}
-  .step{display:flex;align-items:center;gap:2px;background:var(--paper);border-radius:8px;padding:2px}
-  .step button{width:34px;height:32px;border:0;background:none;font-size:19px;color:var(--ink);
-               font-family:var(--mono);cursor:pointer;border-radius:6px}
-  .step button:active{background:#DCE3EB}
-  .step .val{font-family:var(--mono);font-weight:700;font-size:16px;width:34px;text-align:center}
-  .grid12{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
-  .unit{position:relative;height:40px;border:1px solid var(--line);background:var(--card);
-        border-radius:8px;font-family:var(--mono);font-size:14px;font-weight:600;color:var(--ink-2);cursor:pointer}
-  .unit[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .unit .dot{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%}
-  .unit .dot.ok{background:var(--ok)} .unit .dot.bad{background:var(--bad)}
+  /* ---------- topic cards ---------- */
+  .sechead{font-family:var(--disp);font-size:12px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--soft);margin:20px 2px 9px}
+  .tcard{display:flex;align-items:center;gap:13px;width:100%;text-align:left;
+    background:var(--card);border:1px solid var(--line);border-left:5px solid var(--gold);
+    border-radius:10px;padding:14px 15px;margin-bottom:10px;color:var(--ink)}
+  .tcard .ico{font-size:26px;line-height:1;flex:none}
+  .tcard .b{flex:1;min-width:0}
+  .tcard .n{font-size:16px;font-weight:600}
+  .tcard .n em{font-style:normal;font-family:var(--disp);font-size:11px;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--gold);margin-left:7px}
+  .tcard .s{font-size:12px;color:var(--soft)}
+  .tcard .go{color:var(--soft);font-size:20px;flex:none}
+  .bar{display:flex;height:7px;margin-top:8px;border-radius:4px;overflow:hidden;background:#E3E9E7}
+  .bar i{display:block}
 
-  /* ---------- master ---------- */
-  .master{margin:0 12px 4px;width:calc(100% - 24px);padding:13px;border-radius:var(--r);
-          border:1.5px solid var(--ok);background:var(--ok-soft);color:var(--ok);
-          font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer}
-  .master:active{background:#CCE8D9}
+  /* ---------- floor + room grid ---------- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    margin-bottom:12px;overflow:hidden}
+  .cap{background:#F5F8F7;border-bottom:1px solid var(--line);padding:9px 14px;
+    font-family:var(--disp);font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--mid);font-weight:600;display:flex;align-items:center;gap:8px}
+  .cap .r{margin-left:auto;font-family:var(--mono);letter-spacing:0;text-transform:none;color:var(--soft)}
+  .pad{padding:13px 14px}
+  .steprow{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .steprow .lbl{font-size:13px;color:var(--soft)}
+  .stepper{display:flex;align-items:center;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .stepper button{width:42px;height:42px;border:0;background:#fff;font-size:20px;color:var(--ink)}
+  .stepper button:active{background:#EDF2F0}
+  .stepper .val{width:54px;text-align:center;font-family:var(--mono);font-size:17px;font-weight:700;
+    border-left:1px solid var(--line);border-right:1px solid var(--line);line-height:42px}
+  .floorjump{margin-left:auto;display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+  .floorjump button{font-family:var(--mono);font-size:12px;font-weight:600;padding:6px 9px;
+    border:1px solid var(--line);background:#fff;border-radius:6px;color:var(--mid)}
+  .floorjump button[aria-pressed="true"]{background:var(--ink);color:#fff;border-color:var(--ink)}
 
-  /* ---------- sections ---------- */
-  .sec{margin:12px;background:var(--card);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-  .sec>h2{margin:0;padding:9px 14px;font-size:11px;font-weight:700;letter-spacing:.1em;
-          text-transform:uppercase;color:var(--mute);background:#F4F7FA;border-bottom:1px solid var(--line)}
-  .item{padding:10px 12px 12px;border-bottom:1px solid #EDF1F5}
-  .item:last-child{border-bottom:0}
-  .item .name{font-size:13px;font-weight:600;margin-bottom:7px}
-  .item .name span{font-weight:400;color:var(--mute);font-size:12px}
-  .chips{display:flex;gap:6px}
-  .chip{flex:1;min-height:46px;padding:6px 4px;border:1px solid var(--line);background:var(--card);
-        border-radius:8px;font-family:var(--sans);font-size:12.5px;font-weight:600;color:var(--ink-2);
-        line-height:1.25;cursor:pointer}
-  .chip[aria-pressed="true"].good{background:var(--ok);border-color:var(--ok);color:#fff}
-  .chip[aria-pressed="true"].mid{background:var(--warn);border-color:var(--warn);color:#fff}
-  .chip[aria-pressed="true"].no{background:var(--bad);border-color:var(--bad);color:#fff}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:13px}
+  .rbtn{position:relative;background:#fff;border:1px solid var(--line);border-radius:8px;
+    padding:11px 4px 9px;color:var(--ink)}
+  .rbtn .no{font-family:var(--mono);font-size:17px;font-weight:700;line-height:1.1}
+  .rbtn .st{font-size:10.5px;color:var(--soft);margin-top:2px;height:14px;overflow:hidden}
+  .rbtn i{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .rbtn[data-g="ผ่าน"] i{background:var(--pass)}
+  .rbtn[data-g="เกือบผ่าน"] i{background:var(--near)}
+  .rbtn[data-g="ไม่ผ่าน"] i{background:var(--fail)}
+  .rbtn[data-g="ไม่ได้ตรวจ"] i{background:var(--skip)}
+  .rbtn[aria-pressed="true"]{border:2px solid var(--ink);box-shadow:0 0 0 2px #E5C88A}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--soft);margin-top:12px}
+  .legend span{display:flex;align-items:center;gap:5px}
+  .legend b{width:8px;height:8px;border-radius:50%;display:block}
 
-  /* good/bad matrix */
-  .mx{width:100%;border-collapse:collapse}
-  .mx th{font-size:11px;font-weight:600;color:var(--mute);padding:6px 0;text-align:center;width:76px}
-  .mx th:first-child{text-align:left;padding-left:14px;width:auto}
-  .mx td{padding:4px 6px 4px 0;border-top:1px solid #EDF1F5}
-  .mx td:first-child{font-size:13px;font-weight:600;padding-left:14px}
-  .yn{display:flex;gap:4px;justify-content:center}
-  .yn button{width:36px;height:36px;border:1px solid var(--line);background:var(--card);border-radius:8px;
-             font-size:16px;font-weight:700;color:var(--mute);cursor:pointer;font-family:var(--mono)}
-  .yn button.y[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
-  .yn button.n[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+  .tabbar{background:var(--dark2);display:flex;position:sticky;top:53px;z-index:25}
+  .tabbar button{flex:1;background:none;border:0;border-bottom:3px solid transparent;
+    color:#8FA39E;font-size:13.5px;padding:12px 6px}
+  .tabbar button[aria-selected="true"]{color:#fff;border-bottom-color:var(--gold)}
 
-  textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;
-           font-family:var(--sans);font-size:13.5px;resize:vertical;min-height:56px}
-  textarea:focus{outline:2px solid var(--brass);outline-offset:-1px;border-color:var(--brass)}
+  /* ---------- room view ---------- */
+  .roomhead{background:var(--card);border-radius:10px;border-left:5px solid var(--gold);
+    padding:14px 16px;display:flex;align-items:center;gap:14px;border:1px solid var(--line);border-left-width:5px}
+  .roomhead .no{font-family:var(--mono);font-size:38px;font-weight:700;line-height:1}
+  .roomhead .m{flex:1;min-width:0}
+  .roomhead .t{font-family:var(--disp);font-size:12.5px;font-weight:600;letter-spacing:.05em;
+    color:var(--gold);text-transform:uppercase}
+  .roomhead .s{font-size:12px;color:var(--soft)}
+  .nav{display:flex;gap:6px}
+  .nav button{width:40px;height:40px;border:1px solid var(--line);background:#fff;border-radius:8px;
+    font-size:17px;color:var(--mid)}
+  .nav button:disabled{opacity:.35}
 
-  /* ---------- bottom ---------- */
-  .foot{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(255,255,255,.96);
-        border-top:1px solid var(--line);backdrop-filter:blur(6px)}
-  .foot .in{max-width:520px;margin:0 auto;padding:10px 12px;display:flex;align-items:center;gap:10px}
-  .verdict{flex:1;min-width:0}
-  .verdict .v{font-family:var(--mono);font-size:17px;font-weight:700;letter-spacing:.02em}
-  .verdict .d{font-size:11.5px;color:var(--mute)}
-  .save{border:0;border-radius:10px;padding:14px 20px;background:var(--ink);color:#fff;
-        font-family:var(--sans);font-size:15px;font-weight:700;cursor:pointer;flex:none}
-  .save:disabled{background:#AAB4C0}
+  .ttabs{display:flex;gap:8px;margin:12px 0;overflow-x:auto;padding-bottom:2px}
+  .ttab{flex:1 0 auto;min-width:132px;position:relative;background:#fff;border:1px solid var(--line);
+    border-radius:9px;padding:10px 12px;text-align:left;color:var(--ink)}
+  .ttab[aria-selected="true"]{border-color:var(--ink);box-shadow:0 0 0 2px #E5C88A}
+  .ttab .n{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .ttab .g{font-size:11.5px;margin-top:3px}
+  .ttab .dirty{position:absolute;top:8px;right:9px;width:8px;height:8px;border-radius:50%;
+    background:var(--gold);box-shadow:0 0 0 3px #F4E7CC}
 
-  /* ---------- list view ---------- */
-  .listwrap{margin:12px}
-  .actions{display:flex;gap:8px;margin-bottom:12px}
-  .actions button{flex:1;padding:11px;border-radius:9px;border:1px solid var(--ink);background:var(--card);
-                  font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
-  .actions button.solid{background:var(--ink);color:#fff}
-  .rec{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);
-       border-radius:9px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
-  .rec .no{font-family:var(--mono);font-weight:700;font-size:17px;width:52px}
-  .rec .txt{flex:1;min-width:0;font-size:12px;color:var(--mute);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pill{font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;font-family:var(--mono)}
-  .pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
-  .empty{text-align:center;color:var(--mute);font-size:13px;padding:40px 20px;
-         border:1px dashed var(--line);border-radius:var(--r);background:var(--card)}
-  .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;
-         padding:9px 16px;border-radius:20px;font-size:13px;font-weight:600;z-index:40;opacity:0;
-         transition:opacity .2s;pointer-events:none}
+  .fld{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .fld:last-child{border-bottom:0}
+  .fld .lab{font-size:13.5px;font-weight:600;margin-bottom:8px}
+  .fld .lab span{color:var(--soft);font-weight:400;font-size:12px;margin-left:5px}
+  .opts{display:grid;gap:7px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .opt{font-size:14px;padding:12px 8px;text-align:center;line-height:1.3;border:1px solid var(--line);
+    background:#fff;color:var(--ink);border-radius:7px;transition:.12s}
+  .opt[aria-pressed="true"]{background:var(--pass);border-color:var(--pass);color:#fff;font-weight:500}
+  .opt[aria-pressed="true"][data-k="bad"]{background:var(--fail);border-color:var(--fail)}
+  .opt[aria-pressed="true"][data-k="warn"]{background:var(--near);border-color:var(--near)}
+  .opt[aria-pressed="true"][data-k="plain"]{background:var(--ink);border-color:var(--ink)}
+  .hint{font-size:12px;color:var(--soft);margin-top:7px}
+  textarea{width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--line);
+    background:#fff;color:var(--ink);border-radius:7px;resize:vertical;min-height:60px}
+  textarea:focus{outline:2px solid var(--gold);outline-offset:-1px}
+  .allok{width:100%;background:#EAF6EF;border:1px solid #BFE0CD;color:var(--pass);
+    font-size:14px;font-weight:500;padding:13px;border-radius:8px;margin-bottom:12px}
+  .allok:active{background:#DCEFE5}
+
+  .verdict{border-radius:10px;padding:14px 16px;display:flex;gap:12px;align-items:center;
+    background:#fff;border:1px solid var(--line);border-left-width:5px;margin-bottom:12px}
+  .verdict .g{font-family:var(--disp);font-size:21px;font-weight:700;white-space:nowrap}
+  .verdict .w{font-size:12.5px;color:var(--mid)}
+  .verdict[data-g="ผ่าน"]{border-left-color:var(--pass)} .verdict[data-g="ผ่าน"] .g{color:var(--pass)}
+  .verdict[data-g="เกือบผ่าน"]{border-left-color:var(--near)} .verdict[data-g="เกือบผ่าน"] .g{color:var(--near)}
+  .verdict[data-g="ไม่ผ่าน"]{border-left-color:var(--fail)} .verdict[data-g="ไม่ผ่าน"] .g{color:var(--fail)}
+  .verdict[data-g="ไม่ได้ตรวจ"]{border-left-color:var(--skip)} .verdict[data-g="ไม่ได้ตรวจ"] .g{color:var(--skip)}
+  .verdict[data-g="ยังไม่ได้กรอก"]{border-left-color:#C3CCCA;background:#F7FAF9}
+  .verdict[data-g="ยังไม่ได้กรอก"] .g{color:#8B9694;font-size:17px}
+
+  .savebar{position:sticky;bottom:0;z-index:26;background:rgba(255,255,255,.97);
+    border-top:1px solid var(--line);margin:0 -14px -40px;padding:11px 14px;
+    display:flex;align-items:center;gap:12px;backdrop-filter:blur(6px)}
+  .savebar .info{flex:1;min-width:0}
+  .savebar .info .a{font-size:13px;font-weight:600}
+  .savebar .info .b{font-size:11.5px;color:var(--soft)}
+  .btn{font-size:15px;font-weight:600;padding:13px 22px;border:1px solid var(--ink);
+    background:var(--ink);color:#fff;border-radius:8px;flex:none}
+  .btn.ghost{background:#fff;color:var(--ink)}
+  .btn:disabled{opacity:.4}
+  .msg{font-size:12.5px} .msg.ok{color:var(--pass)} .msg.err{color:var(--fail)}
+
+  /* ---------- tables ---------- */
+  .score{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .sc{background:#fff;padding:12px}
+  .sc .n{font-family:var(--disp);font-size:26px;font-weight:700;line-height:1}
+  .sc .t{font-size:11.5px;color:var(--soft);margin-top:2px}
+  .sc[data-g="ผ่าน"] .n{color:var(--pass)} .sc[data-g="เกือบผ่าน"] .n{color:var(--near)}
+  .sc[data-g="ไม่ผ่าน"] .n{color:var(--fail)} .sc[data-g="ไม่ได้ตรวจ"] .n{color:var(--skip)}
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;letter-spacing:.05em;color:var(--soft);font-weight:600;
+    padding:9px 11px;background:#FAFCFB;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 11px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:middle}
+  tr:last-child td{border-bottom:0}
+  td.k{font-family:var(--mono);font-weight:600}
+  td.n{font-family:var(--mono);text-align:center;width:50px}
+  .minibar{height:7px;background:#EDF1F0;border-radius:4px;overflow:hidden;min-width:60px;display:flex}
+  .minibar i{display:block;height:7px}
+  .badge{display:inline-block;font-size:11px;padding:2px 9px;border-radius:20px;font-weight:500;white-space:nowrap}
+  .badge[data-g="ผ่าน"]{background:var(--pass-s);color:var(--pass)}
+  .badge[data-g="เกือบผ่าน"]{background:var(--near-s);color:#8A5D14}
+  .badge[data-g="ไม่ผ่าน"]{background:var(--fail-s);color:var(--fail)}
+  .badge[data-g="ไม่ได้ตรวจ"]{background:var(--skip-s);color:var(--skip)}
+  .badge[data-g="ยังไม่ตรวจ"],.badge[data-g="ยังไม่ได้กรอก"]{background:#F2F5F4;color:#AEB9B7}
+  tr.band td{font-family:var(--disp);font-weight:600;font-size:12.5px;background:#F1F5F4;color:var(--seal)}
+  tr.band span{float:right;font-family:var(--mono);font-weight:500;font-size:11px;color:var(--soft)}
+  .scroll{overflow-x:auto}
+  .scroll table{min-width:640px}
+  .na{color:#AEB9B7} .ok{color:var(--pass)} .no{color:var(--fail);font-weight:500}
+  .empty{padding:26px 16px;text-align:center;color:var(--soft);font-size:13px}
+
+  /* ---------- toast / modal / lock ---------- */
+  .toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%);background:var(--ink);
+    color:#fff;padding:10px 17px;border-radius:22px;font-size:13px;font-weight:600;z-index:70;
+    opacity:0;transition:opacity .2s;pointer-events:none;max-width:90vw;text-align:center}
   .toast.on{opacity:1}
-  /* ---------- summary ---------- */
-  .kpi{display:flex;gap:8px;margin:12px 12px 0}
-  .kpi>div{flex:1;background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:9px 11px}
-  .kpi .n{font-family:var(--mono);font-size:23px;font-weight:700;line-height:1.15}
-  .kpi .l{font-size:11px;color:var(--mute)}
-  .cat{display:flex;gap:12px;padding:12px 14px;border-bottom:1px solid #EDF1F5;align-items:flex-start}
-  .cat:last-child{border-bottom:0}
-  .cat>.n{font-family:var(--mono);font-size:26px;font-weight:700;width:40px;text-align:right;flex:none;
-          line-height:1.05;color:var(--bad)}
-  .cat>.n.zero{color:var(--line)}
-  .cat .body{flex:1;min-width:0}
-  .cat .t{font-size:14px;font-weight:600}
-  .cat .t em{font-style:normal;color:var(--mute);font-weight:400;font-size:10.5px;
-             text-transform:uppercase;letter-spacing:.08em;margin-left:5px}
-  .track{height:5px;background:var(--paper);border-radius:3px;margin:7px 0;overflow:hidden}
-  .fill{height:100%;background:var(--bad);border-radius:3px}
-  .rooms{display:flex;flex-wrap:wrap;gap:4px}
-  .rchip{font-family:var(--mono);font-size:11.5px;font-weight:600;padding:3px 7px;border-radius:6px;
-         background:var(--bad-soft);color:var(--bad);border:0;cursor:pointer}
-  .split{font-size:11.5px;color:var(--mute);margin-top:6px}
-  .ftab{width:100%;border-collapse:collapse;font-size:13px}
-  .ftab td{padding:7px 14px;border-top:1px solid #EDF1F5}
-  .ftab tr:first-child td{border-top:0}
-  .ftab td.f{font-family:var(--mono);font-weight:700;width:52px}
-  .ftab td.b{width:110px}
-  .ftab td.r{text-align:right;font-family:var(--mono);font-size:12px;color:var(--mute);width:74px}
-  .hide{display:none}
-  button:focus-visible,input:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
-  @media(prefers-reduced-motion:reduce){*{transition:none!important}}
-
-  /* ---------- sheet sync ---------- */
-  .sync{display:flex;align-items:center;gap:5px;flex:none;background:#26313F;border:0;
-        border-radius:20px;padding:5px 10px;color:#9AA7B6;font-family:var(--sans);
-        font-size:11px;font-weight:600;cursor:pointer}
-  .sync .d{width:7px;height:7px;border-radius:50%;background:#7B8899;flex:none}
-  .sync.ok{color:#CFE9DA} .sync.ok .d{background:#3FBF7F}
-  .sync.busy{color:#F0DFBC} .sync.busy .d{background:var(--brass);animation:blink 1s infinite}
-  .sync.err{color:#F2C0BB} .sync.err .d{background:#E4695E}
-  @keyframes blink{50%{opacity:.2}}
-
-  .modal{position:fixed;inset:0;z-index:60;background:rgba(20,28,40,.55);
-         display:flex;align-items:flex-end;justify-content:center}
-  .modal.hide{display:none}
-  .modal .box{background:var(--card);width:100%;max-width:520px;border-radius:14px 14px 0 0;
-              padding:16px 14px 20px;max-height:88vh;overflow:auto}
-  .modal h3{margin:0 0 4px;font-size:15px}
-  .modal p{margin:0 0 12px;font-size:12px;color:var(--mute);line-height:1.5}
+  .modal{position:fixed;inset:0;z-index:60;background:rgba(15,30,29,.55);display:flex;
+    align-items:flex-end;justify-content:center}
+  .modal .box{background:#fff;width:100%;max-width:760px;border-radius:14px 14px 0 0;
+    padding:16px 15px 22px;max-height:88vh;overflow:auto}
+  .modal h3{margin:0 0 5px;font-size:15.5px}
+  .modal p{margin:0 0 12px;font-size:12px;color:var(--soft);line-height:1.5}
   .modal label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;
-               text-transform:uppercase;color:var(--mute);margin:10px 0 4px}
-  .modal input{width:100%;border:1px solid var(--line);border-radius:8px;padding:9px;
-               font-family:var(--mono);font-size:12px}
-  .modal input:focus{outline:2px solid var(--brass);outline-offset:-1px}
-  .mbtns{display:flex;gap:8px;margin-top:14px}
-  .mbtns button{flex:1;padding:12px;border-radius:9px;border:1px solid var(--ink);background:var(--card);
-                font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer}
+    text-transform:uppercase;color:var(--soft);margin:10px 0 4px}
+  .modal input{width:100%;border:1px solid var(--line);border-radius:7px;padding:10px;
+    font-family:var(--mono);font-size:12px}
+  .mbtns{display:flex;gap:8px;margin-top:13px}
+  .mbtns button{flex:1;padding:12px;border-radius:8px;border:1px solid var(--ink);background:#fff;
+    font-size:13px;font-weight:600;color:var(--ink)}
   .mbtns button.solid{background:var(--ink);color:#fff}
-  .mnote{margin-top:12px;font-size:11.5px;color:var(--mute);font-family:var(--mono);word-break:break-all}
+  .mnote{margin-top:11px;font-size:11.5px;color:var(--soft);font-family:var(--mono);word-break:break-all}
 
-  /* ---------- lock screen ---------- */
-  .lock{position:fixed;inset:0;z-index:80;background:var(--ink);color:#fff;
-        display:flex;align-items:center;justify-content:center;padding:20px}
-  .lock.hide{display:none}
+  .lock{position:fixed;inset:0;z-index:80;background:var(--dark);color:#fff;display:flex;
+    align-items:center;justify-content:center;padding:20px}
   .lockbox{width:100%;max-width:300px;text-align:center}
-  .lockbox .brasstick{width:36px;height:3px;background:var(--brass);border-radius:2px;margin:0 auto 16px}
-  .lockttl{font-size:16px;font-weight:600;letter-spacing:.02em}
-  .locksub{font-size:12.5px;color:#9AA7B6;margin-top:5px;min-height:34px;line-height:1.4}
+  .lockbox .tick{width:36px;height:3px;background:var(--gold);border-radius:2px;margin:0 auto 16px}
+  .lockttl{font-family:var(--disp);font-size:17px;font-weight:600}
+  .locksub{font-size:12.5px;color:#9AB0A9;margin-top:6px;min-height:34px;line-height:1.4}
   .locksub.bad{color:#F2A29A}
   .dots{display:flex;gap:12px;justify-content:center;margin:14px 0 22px}
   .dots i{width:13px;height:13px;border-radius:50%;border:1.5px solid #55626F;display:block}
-  .dots i.on{background:var(--brass);border-color:var(--brass)}
+  .dots i.on{background:var(--gold);border-color:var(--gold)}
+  .keys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .keys button{height:56px;border:1px solid #37424F;background:#1D2732;color:#fff;border-radius:12px;
+    font-family:var(--mono);font-size:21px;font-weight:600}
+  .keys button.alt{font-size:14px;font-family:var(--sans);color:#9AB0A9;border-color:transparent;background:none}
   .shake{animation:shake .32s}
   @keyframes shake{25%{transform:translateX(-7px)}50%{transform:translateX(7px)}75%{transform:translateX(-4px)}}
-  .pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-  .pad button{height:56px;border:1px solid #37424F;background:#1D2732;color:#fff;border-radius:12px;
-              font-family:var(--mono);font-size:21px;font-weight:600;cursor:pointer}
-  .pad button:active{background:#2A3644}
-  .pad button.alt{font-size:15px;font-family:var(--sans);color:#9AA7B6;border-color:transparent;background:none}
-  .pad button:disabled{opacity:.4}
-  .lockbtn{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);background:none;
-           border-radius:9px;color:var(--mute);font-family:var(--sans);font-size:12px;cursor:pointer}
+
+  .warnbox{background:#FFF6E3;border-left:4px solid var(--near);padding:11px 14px;font-size:12.5px;
+    color:#7A5312;border-radius:7px;margin-bottom:12px}
+  @media (min-width:560px){ .grid{grid-template-columns:repeat(6,1fr)} }
+  @media (max-width:420px){ .score{grid-template-columns:repeat(2,1fr)} .opts{grid-template-columns:1fr} }
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
+</head>
+<body>
+<div class="app">
 
-<div class="wrap">
-  <div class="bar">
-    <div class="brasstick"></div>
-    <h1>เช็คม่าน · Curtain</h1>
-    <button class="sync" id="syncChip" title="ตั้งค่าการเชื่อมต่อ Google Sheet">
-      <span class="d"></span><span id="syncTxt">เชื่อมชีต</span>
-    </button>
-    <input id="inspector" placeholder="ผู้ตรวจ" autocomplete="off">
-  </div>
-  <div class="tabs">
-    <button id="tabCheck" aria-selected="true">ตรวจห้อง</button>
-    <button id="tabSum" aria-selected="false">สรุป</button>
-    <button id="tabList" aria-selected="false">บันทึกแล้ว (<span id="cnt">0</span>)</button>
+  <div class="topbar">
+    <button class="back hide" id="back" aria-label="ย้อนกลับ">‹</button>
+    <h1 id="ttl">เช็คห้อง<small id="sub">เลือกหมวดที่จะตรวจ</small></h1>
+    <button class="sync" id="syncChip"><i></i><span id="syncTxt">เชื่อมชีต</span></button>
   </div>
 
-  <!-- ============ CHECK VIEW ============ -->
-  <div id="viewCheck">
-    <div class="tag">
-      <div class="tag-top">
-        <div class="plate" id="plate">301</div>
-        <div class="tag-meta">
-          <div class="rtype" id="rtype">grand corner</div>
-          <div class="rsub" id="rsub">ชั้น 3 · ห้อง 01</div>
-        </div>
-        <div class="led" id="led"></div>
+  <div class="tabbar hide" id="tabbar">
+    <button data-t="rooms" aria-selected="true">เลือกห้อง</button>
+    <button data-t="sum"   aria-selected="false">สรุป</button>
+    <button data-t="log"   aria-selected="false">บันทึกแล้ว (<span id="logCount">0</span>)</button>
+  </div>
+
+  <!-- ============ หน้าเลือกหมวด ============ -->
+  <div class="pane" id="viewHome">
+    <div id="setupWarn" class="warnbox hide">
+      ยังไม่ได้เชื่อม Google Sheet — แตะปุ่ม “เชื่อมชีต” มุมขวาบนแล้ววางลิงก์ Web App จาก Apps Script
+    </div>
+
+    <div class="who">
+      <div class="f">
+        <label for="who">ผู้ตรวจ</label>
+        <input id="who" placeholder="ชื่อผู้ตรวจ" autocomplete="off">
+        <div class="dsh" id="whoNote"></div>
       </div>
-      <div class="picker">
-        <div class="prow">
-          <span class="lab">ชั้น</span>
-          <div class="step">
-            <button id="fdown" aria-label="ลดชั้น">−</button>
-            <span class="val" id="fval">3</span>
-            <button id="fup" aria-label="เพิ่มชั้น">+</button>
+      <div class="f">
+        <label for="dt">วันที่ตรวจ</label>
+        <input id="dt" type="date">
+        <div class="dsh" id="dtNote"></div>
+      </div>
+    </div>
+
+    <div class="sechead">หมวดที่ตรวจ</div>
+    <div id="topicCards"></div>
+
+    <div class="sechead">ภาพรวมวันนี้</div>
+    <div class="card"><div id="todayBox"></div></div>
+  </div>
+
+  <!-- ============ หน้าเลือกห้อง ============ -->
+  <div class="pane hide" id="viewRooms">
+    <div class="card">
+      <div class="cap">Floor · ชั้น <span class="r" id="floorNote"></span></div>
+      <div class="pad">
+        <div class="steprow">
+          <span class="lbl">ชั้น</span>
+          <div class="stepper">
+            <button id="fMinus" aria-label="ลดชั้น">−</button>
+            <div class="val" id="fVal">3</div>
+            <button id="fPlus" aria-label="เพิ่มชั้น">+</button>
           </div>
-          <span class="lab" style="width:auto;margin-left:6px">แบรนด์</span>
-          <div class="chips" style="flex:1" id="brandChips">
-            <button class="chip good" data-brand="Dooya" aria-pressed="true" style="min-height:34px">Dooya</button>
-            <button class="chip good" data-brand="Smart curtain" aria-pressed="false" style="min-height:34px">Smart</button>
-          </div>
+          <div class="floorjump" id="floorJump"></div>
         </div>
-        <div class="grid12" id="units"></div>
-      </div>
-    </div>
-
-    <button class="master" id="master">✓ ทั้งหมดปกติ — แล้วค่อยแก้เฉพาะจุดที่เสีย</button>
-
-    <div class="sec">
-      <h2>close · ปิดม่าน</h2>
-      <div class="item" data-k="closeSheer">
-        <div class="name">ม่านโปร่ง <span>sheer</span></div>
-        <div class="chips">
-          <button class="chip good" data-v="ปิดสุด">ปิดสุด</button>
-          <button class="chip mid" data-v="ปิดเหลือระยะนิดหน่อย">ปิดเหลือระยะนิดหน่อย</button>
-          <button class="chip no" data-v="ปิดไม่ได้ เหลือครึ่งทาง">ปิดไม่ได้ เหลือครึ่งทาง</button>
+        <div class="grid" id="roomGrid"></div>
+        <div class="legend">
+          <span><b style="background:var(--pass)"></b>ผ่าน</span>
+          <span><b style="background:var(--near)"></b>เกือบผ่าน</span>
+          <span><b style="background:var(--fail)"></b>ไม่ผ่าน</span>
+          <span><b style="background:var(--skip)"></b>ไม่ได้ตรวจ</span>
+          <span><b style="background:var(--line)"></b>ยังไม่ตรวจ</span>
         </div>
       </div>
-      <div class="item" data-k="closeCurtain">
-        <div class="name">ม่านทึบ <span>curtain</span></div>
-        <div class="chips">
-          <button class="chip good" data-v="ปิดสุด">ปิดสุด</button>
-          <button class="chip mid" data-v="ปิดเหลือระยะนิดหน่อย">ปิดเหลือระยะนิดหน่อย</button>
-          <button class="chip no" data-v="ปิดไม่ได้ เหลือครึ่งทาง">ปิดไม่ได้ เหลือครึ่งทาง</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="sec">
-      <h2>open · เปิดม่าน</h2>
-      <div class="item" data-k="openSheer">
-        <div class="name">ม่านโปร่ง <span>sheer</span></div>
-        <div class="chips">
-          <button class="chip good" data-v="เปิดสุด">เปิดสุด</button>
-          <button class="chip no" data-v="เปิดไม่สุด">เปิดไม่สุด</button>
-        </div>
-      </div>
-      <div class="item" data-k="openCurtain">
-        <div class="name">ม่านทึบ <span>curtain</span></div>
-        <div class="chips">
-          <button class="chip good" data-v="เปิดสุด">เปิดสุด</button>
-          <button class="chip no" data-v="เปิดไม่สุด">เปิดไม่สุด</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="sec">
-      <h2>switch · manual · sound</h2>
-      <table class="mx">
-        <thead><tr><th></th><th>sheer โปร่ง</th><th>curtain ทึบ</th></tr></thead>
-        <tbody id="mx"></tbody>
-      </table>
-    </div>
-
-    <div class="sec">
-      <h2>smooth all good · เดินลื่นทั้งระบบ</h2>
-      <div class="item" data-k="smooth">
-        <div class="chips">
-          <button class="chip good" data-v="good">good — ลื่น ไม่สะดุด</button>
-          <button class="chip no" data-v="bad">bad — สะดุด/ฝืด</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="sec">
-      <h2>หมายเหตุ / รายละเอียด defect</h2>
-      <div class="item"><textarea id="note" placeholder="เช่น sheer ปิดไม่สนิทเหลือ ~5 ซม. / สวิตช์ curtain กดแล้วไม่ทำงาน"></textarea></div>
     </div>
   </div>
 
-  <!-- ============ SUMMARY VIEW ============ -->
-  <div id="viewSum" class="hide">
-    <div class="kpi">
-      <div><div class="n" id="kTotal">0</div><div class="l">ตรวจแล้ว (ห้อง)</div></div>
-      <div><div class="n" id="kPass" style="color:var(--ok)">0</div><div class="l">ปกติ</div></div>
-      <div><div class="n" id="kBad" style="color:var(--bad)">0</div><div class="l">มีปัญหา</div></div>
-    </div>
-    <div class="sec">
-      <h2>ปัญหาแยกตามอาการ · จำนวนห้อง</h2>
-      <div id="cats"></div>
-    </div>
-    <div class="sec">
-      <h2>แยกตามชั้น</h2>
-      <table class="ftab"><tbody id="floors"></tbody></table>
-    </div>
-    <div class="sec">
-      <h2>แยกตามแบรนด์</h2>
-      <table class="ftab"><tbody id="brands"></tbody></table>
-    </div>
-    <div style="margin:0 12px 12px;font-size:11.5px;color:var(--mute)">
-      แตะเลขห้องเพื่อเปิดดู/แก้ไขห้องนั้น · หนึ่งห้องนับได้หลายอาการ ผลรวมจึงมากกว่าจำนวนห้องที่มีปัญหาได้
-    </div>
+  <!-- ============ สรุป ============ -->
+  <div class="pane hide" id="viewSum">
+    <div class="score" id="score"></div>
+    <div class="bar" id="sumBar" style="margin-top:12px"></div>
+    <p class="hint" id="progressTxt"></p>
+
+    <div class="sechead">แยกตามชั้น</div>
+    <div class="card scroll"><table>
+      <thead><tr><th>ชั้น</th><th>บันทึก</th><th>ผ่าน</th><th>เกือบผ่าน</th><th>ไม่ผ่าน</th><th>ไม่ได้ตรวจ</th><th>สัดส่วน</th></tr></thead>
+      <tbody id="floorBody"></tbody>
+    </table></div>
+
+    <div class="sechead">แยกตามข้อบกพร่อง</div>
+    <div class="card"><table><tbody id="defectBody"></tbody></table></div>
+
+    <div class="sechead">ห้องที่ต้องกลับไปแก้</div>
+    <div class="card"><table><tbody id="fixBody"></tbody></table></div>
   </div>
 
-  <!-- ============ LIST VIEW ============ -->
-  <div id="viewList" class="hide">
-    <div class="listwrap">
-      <div class="actions">
-        <button class="solid" id="push">↑ ส่งขึ้นชีตทั้งหมด</button>
-        <button id="pullBtn">↓ ดึงจากชีต</button>
+  <!-- ============ บันทึกแล้ว ============ -->
+  <div class="pane hide" id="viewLog">
+    <div class="card scroll"><table>
+      <thead><tr id="logHead"></tr></thead>
+      <tbody id="logBody"></tbody>
+    </table></div>
+  </div>
+
+  <!-- ============ หน้าเช็ก ============ -->
+  <div class="pane hide" id="viewRoom">
+    <div class="roomhead">
+      <div class="no" id="rNo">301</div>
+      <div class="m">
+        <div class="t" id="rType"></div>
+        <div class="s" id="rSub"></div>
       </div>
-      <div class="actions">
-        <button id="dl">ดาวน์โหลด CSV</button>
-        <button id="cp">คัดลอกไปวางในชีต</button>
+      <div class="nav">
+        <button id="rPrev" aria-label="ห้องก่อนหน้า">‹</button>
+        <button id="rNext" aria-label="ห้องถัดไป">›</button>
       </div>
-      <div id="recs"></div>
-      <button class="lockbtn" id="lockNow" style="margin-top:14px">🔒 ล็อกหน้าจอ</button>
-      <button class="lockbtn" id="clr">ล้างข้อมูลในเครื่องนี้ (ชีตไม่ถูกแตะ)</button>
+    </div>
+
+    <div class="ttabs" id="topicTabs"></div>
+
+    <div class="who" style="margin-bottom:12px">
+      <div class="f">
+        <label for="who2">ผู้ตรวจ</label>
+        <input id="who2" placeholder="ชื่อผู้ตรวจ" autocomplete="off">
+      </div>
+      <div class="f">
+        <label for="dt2">วันที่ตรวจ</label>
+        <input id="dt2" type="date">
+        <div class="dsh" id="dtNote2"></div>
+      </div>
+    </div>
+
+    <button class="allok" id="btnAllOk">✓ ทั้งหมดปกติ — แล้วค่อยแก้เฉพาะจุดที่เสีย</button>
+    <div id="formBox"></div>
+
+    <div class="verdict" id="verdict"><div class="g" id="vG"></div><div class="w" id="vW"></div></div>
+
+    <div class="savebar">
+      <div class="info">
+        <div class="a" id="saveInfo">ยังไม่มีอะไรต้องบันทึก</div>
+        <div class="b msg" id="saveMsg"></div>
+      </div>
+      <button class="btn" id="btnSave" disabled>บันทึก</button>
     </div>
   </div>
 </div>
 
-<div class="foot">
-  <div class="in">
-    <div class="verdict">
-      <div class="v" id="vtext">ยังไม่ครบ</div>
-      <div class="d" id="vdesc">เลือกให้ครบ 11 หัวข้อ</div>
-    </div>
-    <button class="save" id="save" disabled>บันทึก</button>
-  </div>
-</div>
 <div class="toast" id="toast"></div>
 
-<!-- ============ LOCK SCREEN ============ -->
-<div class="lock hide" id="lock">
-  <div class="lockbox">
-    <div class="brasstick"></div>
-    <div class="lockttl">เช็คม่าน · Curtain</div>
-    <div class="locksub" id="lockmsg">ใส่รหัสเพื่อเข้าใช้งาน</div>
-    <div class="dots" id="dots"></div>
-    <div class="pad" id="pad"></div>
-  </div>
-</div>
-
-<!-- ============ SHEET CONFIG MODAL ============ -->
+<!-- ============ ตั้งค่าการเชื่อมชีต ============ -->
 <div class="modal hide" id="cfgModal">
   <div class="box">
     <h3>เชื่อมต่อ Google Sheet</h3>
-    <p>วาง URL ของ Apps Script Web App ที่ deploy จากชีตฐานข้อมูล
-       (ดูวิธีทำใน <b>SETUP.md</b> ของ repo นี้) — เมื่อเชื่อมแล้ว ทุกครั้งที่กด “บันทึก”
-       ข้อมูลจะขึ้นชีตทันที และหน้านี้จะดึงข้อมูลจากชีตให้อัตโนมัติทุก 15 วินาที</p>
+    <p>วางลิงก์ Web App ที่ deploy จาก Apps Script ของชีต (วิธีทำอยู่ใน <b>SETUP.md</b>)
+       ทุกหมวดใช้ลิงก์เดียวกันหมด</p>
     <label for="cfgUrl">Web App URL</label>
     <input id="cfgUrl" placeholder="https://script.google.com/macros/s/AKfy.../exec" autocomplete="off">
     <label for="cfgToken">รหัสผ่าน (ต้องตรงกับ TOKEN ใน Apps Script)</label>
@@ -408,259 +410,778 @@
   </div>
 </div>
 
+<!-- ============ หน้าล็อก ============ -->
+<div class="lock hide" id="lock">
+  <div class="lockbox">
+    <div class="tick"></div>
+    <div class="lockttl">เช็คห้อง</div>
+    <div class="locksub" id="lockMsg">ใส่รหัสเพื่อเข้าใช้งาน</div>
+    <div class="dots" id="lockDots"></div>
+    <div class="keys" id="lockKeys"></div>
+  </div>
+</div>
+
 <script>
-const TYPE = {1:"grand corner",2:"deluxe twin",3:"deluxe king",4:"deluxe king",5:"deluxe king",
-  6:"grand deluxe",7:"grand deluxe",8:"deluxe king",9:"deluxe king",10:"deluxe king",
-  11:"deluxe twin",12:"grand corner"};
-const YN = [
-  ["switch","สวิตช์","switchSheer","switchCurtain"],
-  ["manual","มือดึง","manualSheer","manualCurtain"],
-  ["sound","เสียง","soundSheer","soundCurtain"]
+/* =====================================================================
+   ตั้งค่า
+   ===================================================================== */
+const API_URL = "https://script.google.com/macros/s/AKfycbw0yuXUkJZll-T7eeAAbmOhXpmY4A0OlKz_eWiI4tqm840u05ENbO-z4FTi9XSERpo9/exec";
+const API_TOKEN = "";              /* ต้องตรงกับ TOKEN ใน Code.gs — เว้นว่าง = ไม่ล็อก */
+const PIN_LEN   = 3;               /* ความยาวรหัส ให้ตรงกับ TOKEN ใน Code.gs */
+
+const FLOOR_FROM = 3, FLOOR_TO = 20, ROOMS_PER_FLOOR = 12;
+const TOP_ONLY = ["01","12"];      /* ท้ายเลขห้องที่ซิลิโคนยิงเฉพาะขอบบนตามแบบ */
+const ROOM_TYPE = {1:"grand corner",2:"deluxe twin",3:"deluxe king",4:"deluxe king",
+  5:"deluxe king",6:"grand deluxe",7:"grand deluxe",8:"deluxe king",9:"deluxe king",
+  10:"deluxe king",11:"deluxe twin",12:"grand corner"};
+
+const ACCESS = "การเข้าห้อง";
+const GRADES = ["ผ่าน","เกือบผ่าน","ไม่ผ่าน","ไม่ได้ตรวจ"];
+const GC = {"ผ่าน":"#1B7A4B","เกือบผ่าน":"#B8862B","ไม่ผ่าน":"#B23C31","ไม่ได้ตรวจ":"#6B7877"};
+
+/* ---------------------------------------------------------------------
+   หมวดที่เปิดใช้ — เพิ่มหมวดใหม่ = เพิ่มก้อนหนึ่งตรงนี้
+   แล้วเพิ่มก้อนที่ชื่อคอลัมน์ตรงกันเป๊ะใน Code.gs (ตัวแปร TOPICS)
+   ตัวเลือกตัวแรกของแต่ละหัวข้อ = ค่าปกติ  ·  bad = ไม่ผ่าน  ·  warn = เกือบผ่าน
+   --------------------------------------------------------------------- */
+const TOPICS = [
+{
+  id:"curtain", name:"ม่าน", en:"Curtain", icon:"🪟", grade:"ผลตรวจ",
+  auto: r => ({ "Room type": ROOM_TYPE[unitOf(r)] || "" }),
+  sections:[
+    {cap:"Setup · ข้อมูลม่าน", fields:[
+      {col:"แบรนด์", label:"แบรนด์", remember:true, plain:true,
+       opts:[{v:"Dooya"},{v:"Smart curtain"}]}
+    ]},
+    {cap:"Close · ปิดม่าน", fields:[
+      {col:"ปิดม่านโปร่ง", label:"ม่านโปร่ง", en:"sheer",
+       opts:[{v:"ปิดสุด"},{v:"ปิดเหลือระยะนิดหน่อย",warn:1},{v:"ปิดไม่ได้ เหลือครึ่งทาง",bad:1}]},
+      {col:"ปิดม่านทึบ", label:"ม่านทึบ", en:"curtain",
+       opts:[{v:"ปิดสุด"},{v:"ปิดเหลือระยะนิดหน่อย",warn:1},{v:"ปิดไม่ได้ เหลือครึ่งทาง",bad:1}]}
+    ]},
+    {cap:"Open · เปิดม่าน", fields:[
+      {col:"เปิดม่านโปร่ง", label:"ม่านโปร่ง", en:"sheer",
+       opts:[{v:"เปิดสุด"},{v:"เปิดไม่สุด",bad:1}]},
+      {col:"เปิดม่านทึบ", label:"ม่านทึบ", en:"curtain",
+       opts:[{v:"เปิดสุด"},{v:"เปิดไม่สุด",bad:1}]}
+    ]},
+    {cap:"Switch · สวิตช์", fields:[
+      {col:"สวิตช์ม่านโปร่ง", label:"สวิตช์ม่านโปร่ง", en:"switch sheer",
+       opts:[{v:"ปกติ"},{v:"กดแล้วไม่ทำงาน",bad:1}]},
+      {col:"สวิตช์ม่านทึบ", label:"สวิตช์ม่านทึบ", en:"switch curtain",
+       opts:[{v:"ปกติ"},{v:"กดแล้วไม่ทำงาน",bad:1}]}
+    ]},
+    {cap:"Manual · มือดึง", fields:[
+      {col:"มือดึงม่านโปร่ง", label:"มือดึงม่านโปร่ง", en:"manual sheer",
+       opts:[{v:"ปกติ"},{v:"ดึงแล้วไม่ทำงาน",bad:1}]},
+      {col:"มือดึงม่านทึบ", label:"มือดึงม่านทึบ", en:"manual curtain",
+       opts:[{v:"ปกติ"},{v:"ดึงแล้วไม่ทำงาน",bad:1}]}
+    ]},
+    {cap:"Sound & Smooth · เสียงและการเดินราง", fields:[
+      {col:"เสียงม่านโปร่ง", label:"เสียงม่านโปร่ง", en:"sound sheer",
+       opts:[{v:"ปกติ"},{v:"ดัง",warn:1}]},
+      {col:"เสียงม่านทึบ", label:"เสียงม่านทึบ", en:"sound curtain",
+       opts:[{v:"ปกติ"},{v:"ดัง",warn:1}]},
+      {col:"เดินลื่นทั้งระบบ", label:"เดินลื่นทั้งระบบ", en:"smooth all",
+       opts:[{v:"ลื่น ไม่สะดุด"},{v:"สะดุด/ฝืด",bad:1}]}
+    ]}
+  ]
+},
+{
+  id:"silicone", name:"ซิลิโคนขอบอ่าง", en:"Silicone", icon:"🧴", grade:"เกรด",
+  sections:[
+    {cap:"Scope · ขอบเขตที่ยิง", fields:[
+      {col:"ขอบเขตงาน",
+       label: r => isTopOnly(r) ? "ห้องนี้ตามแบบยิงแค่ขอบบน" : "ห้องนี้ตามแบบยิงครบทุกด้าน",
+       opts: r => isTopOnly(r)
+         ? [{v:"ยิงขอบบนแค่ขอบบน (01&12)"},{v:"ยิงด้านข้างมาด้วย",bad:1},{v:"ยังไม่ได้ยิง",bad:1}]
+         : [{v:"ยิงครบทุกด้าน"},{v:"ยิงไม่ครบสามด้าน",bad:1},{v:"ยังไม่ได้ยิง",bad:1}]}
+    ]},
+    {cap:"Quality · คุณภาพงาน", fields:[
+      {col:"สีที่ใช้", label:"สีที่ใช้", en:"สเปกคือแมตช์",
+       opts:[{v:"แมตช์"},{v:"เงา",bad:1},{v:"ยังไม่ได้ยิง",bad:1}]},
+      {col:"ระยะขอบ", label:"ระยะขอบ",
+       opts:[{v:"เท่ากันทุกด้าน"},{v:"มีด้านใดด้านหนึ่งหนากว่าผิดปกติ",bad:1}]},
+      {col:"ตัดขอบ", label:"ตัดขอบ",
+       opts:[{v:"เรียบร้อย"},{v:"เก็บไม่เรียบฝั่งซ้าย",bad:1},{v:"เก็บไม่เรียบฝั่งขวา",bad:1},
+             {v:"เก็บไม่เรียบรอบด้าน",bad:1}]},
+      {col:"ฟองอากาศ", label:"ฟองอากาศ",
+       opts:[{v:"ไม่พบ"},{v:"มี 1 จุด",warn:1},{v:"มีหลายจุด",warn:1}]},
+      {col:"กินผนัง", label:"กินผนัง", en:"ฝั่งหน้าหิน",
+       opts:[{v:"ไม่พบ"},{v:"ฝั่งซ้าย",bad:1},{v:"ฝั่งขวา",bad:1},{v:"สองฝั่ง",bad:1}]},
+      {col:"สภาพผนัง", label:"สภาพผนัง",
+       opts:[{v:"ปกติ"},{v:"ถลอก - ต้องแตะสี",warn:1}]}
+    ]}
+  ]
+}
 ];
-const KEYS = ["closeSheer","closeCurtain","openSheer","openCurtain","switchSheer","switchCurtain",
-  "manualSheer","manualCurtain","soundSheer","soundCurtain","smooth"];
-const GOOD = {closeSheer:"ปิดสุด",closeCurtain:"ปิดสุด",openSheer:"เปิดสุด",openCurtain:"เปิดสุด",
-  switchSheer:"good",switchCurtain:"good",manualSheer:"good",manualCurtain:"good",
-  soundSheer:"good",soundCurtain:"good",smooth:"good"};
-const CATS = [
-  {t:"เปิด–ปิดไม่สุด", en:"open / close", keys:["closeSheer","closeCurtain","openSheer","openCurtain"]},
-  {t:"สวิตช์", en:"switch", keys:["switchSheer","switchCurtain"]},
-  {t:"มือดึง", en:"manual", keys:["manualSheer","manualCurtain"]},
-  {t:"เสียงดัง", en:"sound", keys:["soundSheer","soundCurtain"]},
-  {t:"เดินไม่ลื่น สะดุด", en:"smooth", keys:["smooth"]},
-];
-const STORE = "curtain-check-v2";
 
-/* ---------- Google Sheet sync config ----------
-   ใส่ URL ของ Apps Script Web App ตรงนี้ได้เลย เพื่อให้ทุกเครื่องที่เปิดหน้านี้
-   เชื่อมชีตอัตโนมัติโดยไม่ต้องตั้งค่าเอง (หรือจะตั้งผ่านปุ่ม “เชื่อมชีต” บนแถบบนก็ได้) */
-const SHEET_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbyUGnigWmVD_AuoLioUJFvsVJzPl8woaoDysZZ7xzAso3gvgNXEJ4cy6kuU7JiM8eK8rQ/exec";
-const SHEET_TOKEN      = "";
-const CFG_KEY = "curtain-sync-cfg";
-const OUT_KEY = "curtain-sync-outbox";
-const POLL_MS = 15000;
+/* หัวข้อ "การเข้าห้อง" มีเหมือนกันทุกหมวด — ต่อท้ายให้อัตโนมัติ */
+const ACCESS_FIELD = {col:ACCESS, label:"เข้าตรวจได้หรือไม่", access:true,
+  hint:"ถ้าเข้าไม่ได้ ระบบจะบันทึกเป็น “ไม่ได้ตรวจ” และข้ามการตัดเกรด",
+  opts:[{v:"เข้าตรวจได้"},{v:"ไม่มีกุญแจ",warn:1},{v:"มีแขกพัก",warn:1},{v:"ห้องปิดปรับปรุง",warn:1}]};
+TOPICS.forEach(t=> t.sections = t.sections.concat([{cap:"Access · การเข้าห้อง", fields:[ACCESS_FIELD]}]));
+const TOPIC = {}; TOPICS.forEach(t=> TOPIC[t.id] = t);
 
-/* ---------- รหัสผ่าน ----------
-   รหัสตัวจริงอยู่ที่ตัวแปร TOKEN ใน Apps Script — ใส่ผิดคือชีตไม่ให้ทั้งอ่านและเขียน
-   PIN_LEN แค่บอกว่ารหัสยาวกี่หลัก (ให้ตรงกับที่ตั้งไว้ใน Apps Script)
-   APP_PIN ใช้เฉพาะกรณียังไม่ได้เชื่อมชีต — ล็อกหน้าจอเฉย ๆ เท่านั้น */
-const PIN_LEN = 3;
-const APP_PIN = "";
+/* =====================================================================
+   ตัวช่วย
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+const pad2 = n => String(n).padStart(2,"0");
+const FLOORS = []; for(let f=FLOOR_FROM; f<=FLOOR_TO; f++) FLOORS.push(f);
+const TOTAL_ROOMS = FLOORS.length * ROOMS_PER_FLOOR;
+const roomsOfFloor = f => { const a=[]; for(let i=1;i<=ROOMS_PER_FLOOR;i++) a.push(String(f*100+i)); return a; };
+const floorOf = r => String(r).slice(0,-2);
+const unitOf  = r => +String(r).slice(-2);
+const isTopOnly = r => TOP_ONLY.indexOf(String(r).slice(-2)) !== -1;
+const val = (x, r) => (typeof x === "function") ? x(r) : x;
+const fieldsOf = t => t.sections.reduce((a,s)=>a.concat(s.fields), []);
+const scoreOf  = t => fieldsOf(t).filter(f=>!f.access);
+const optsOf   = (f,r) => val(f.opts, r);
+const goodOf   = (f,r) => optsOf(f,r)[0].v;
+/* ค่าที่บันทึกไว้ถือว่าเป็นข้อบกพร่องไหม — "" กับ "-" คือช่องของห้องที่ไม่ได้ตรวจ ไม่นับ */
+function notGood(f, room, v){
+  const s = String(v||"").trim();
+  if(!s || s === "-") return false;
+  const o = optsOf(f, room).filter(x=> x.v === s)[0];
+  return o ? !!(o.bad || o.warn) : s !== goodOf(f, room);
+}
 
-let floor = 3, unit = 1, brand = "Dooya", inspector = "";
-let checks = {}, note = "", records = [], memory = null;
-let cfg = {url:SHEET_WEBAPP_URL, token:SHEET_TOKEN};
+/* วันที่: เก็บเป็น yyyy-mm-dd แต่โชว์เป็น วัน/เดือน/ปี ตามเวลาไทยเสมอ */
+function todayTH(){
+  const s = new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Bangkok"});   // yyyy-mm-dd
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : new Date().toISOString().slice(0,10);
+}
+function thDate(iso){
+  const m = String(iso||"").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[3]+"/"+m[2]+"/"+m[1] : String(iso||"");
+}
+function isoDate(any){
+  const s = String(any||"").trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);      if(m) return m[1]+"-"+m[2]+"-"+m[3];
+  m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);        if(m) return m[3]+"-"+m[2]+"-"+m[1];
+  return "";
+}
+const showDate = any => { const iso = isoDate(any); return iso ? thDate(iso) : String(any||""); };
+
+function toast(t){
+  const el = $("toast"); el.textContent = t; el.classList.add("on");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove("on"), 1900);
+}
+
+/* =====================================================================
+   สถานะ
+   ===================================================================== */
+const S = {
+  view:"home", topic:TOPICS[0].id, tab:"rooms",
+  floor:FLOOR_FROM, room:String(FLOOR_FROM*100+1),
+  inspector:"", date:todayTH(),
+  data:{},            /* topicId → [rows] */
+  latest:{},          /* topicId → { room: row } */
+  draft:{},           /* topicId → {vals, note} ของห้องที่เปิดอยู่ */
+  base:{},            /* topicId → สำเนาตอนเปิดห้อง ใช้เทียบว่าแก้อะไรไป */
+  remember:{}         /* col → ค่าที่ใช้ล่าสุด (เช่น แบรนด์) */
+};
+let cfg = {url:API_URL, token:API_TOKEN};
 let outbox = [], syncState = "off", syncMsg = "";
-let pulling = false, flushing = false, pollTimer = null;
-let unlocked = false, pinBuf = "";
+let unlocked = false, pinBuf = "", flushing = false, pulling = false, pollTimer = null;
 
-/* ---------- storage ---------- */
 const LS = {
   get(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } },
-  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} },
-  del(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 };
-async function load(){
-  let raw = null;
-  try{ if(window.storage && window.storage.get){ const r = await window.storage.get(STORE); raw = r && r.value; } }catch(e){}
-  if(!raw) raw = LS.get(STORE);
-  try{
-    const d = JSON.parse(raw);
-    records = d.records||[]; inspector = d.inspector||""; brand = d.brand||"Dooya";
-  }catch(e){ if(memory){ records = memory.records; } }
-}
-async function persist(){
-  const d = {records, inspector, brand}; memory = d;
-  const s = JSON.stringify(d);
-  LS.set(STORE, s);
-  try{ if(window.storage && window.storage.set) await window.storage.set(STORE, s); }catch(e){}
-}
+const K_CFG="roomcheck-cfg", K_CACHE="roomcheck-cache", K_OUT="roomcheck-outbox", K_ME="roomcheck-me";
 
-/* ---------- helpers ---------- */
-const room = () => floor*100 + unit;
-const pad = n => String(n).padStart(2,"0");
-const today = () => { const d=new Date();
-  return pad(d.getDate())+"/"+pad(d.getMonth()+1)+"/"+d.getFullYear(); };
-const recOf = r => records.find(x=>x.room===r);
-function verdict(c){
-  const filled = KEYS.filter(k=>c[k]).length;
-  if(filled < 11) return {s:"รอตรวจ", n:11-filled};
-  const bad = KEYS.filter(k=>c[k]!==GOOD[k]).length;
-  return {s: bad?"DEFECT":"PASS", n:bad};
-}
-function toast(t){ const el=document.getElementById("toast");
-  el.textContent=t; el.classList.add("on"); setTimeout(()=>el.classList.remove("on"),1600); }
-
-/* ================= Google Sheet realtime sync ================= */
+/* =====================================================================
+   เชื่อมชีต
+   ===================================================================== */
 function loadCfg(){
-  try{ const c = JSON.parse(LS.get(CFG_KEY)||"null"); if(c && c.url) cfg = c; }catch(e){}
+  try{ const c = JSON.parse(LS.get(K_CFG)||"null"); if(c && c.url) cfg = c; }catch(e){}
   const q = new URLSearchParams(location.search);
-  if(q.get("api")){                       // เปิดลิงก์แบบ ...index.html?api=<url>&token=<token> เพื่อตั้งค่าเครื่องใหม่เร็ว ๆ
+  if(q.get("api")){                    /* ...index.html?api=<url>&token=<token> ตั้งเครื่องใหม่เร็ว ๆ */
     cfg = {url:q.get("api").trim(), token:(q.get("token")||"").trim()};
     saveCfg();
     history.replaceState(null,"",location.pathname+location.hash);
   }
 }
-function saveCfg(){ LS.set(CFG_KEY, JSON.stringify(cfg)); }
-function loadOutbox(){ try{ outbox = JSON.parse(LS.get(OUT_KEY)||"[]"); }catch(e){ outbox = []; } }
-function saveOutbox(){ LS.set(OUT_KEY, JSON.stringify(outbox)); }
+const saveCfg = ()=> LS.set(K_CFG, JSON.stringify(cfg));
+const saveOutbox = ()=> LS.set(K_OUT, JSON.stringify(outbox));
 
 function setSync(state, msg){
   syncState = state; syncMsg = msg||"";
-  const chip = document.getElementById("syncChip");
-  const txt  = document.getElementById("syncTxt");
-  if(!chip) return;
+  const chip = $("syncChip");
   chip.className = "sync" + (state==="off" ? "" : " "+state);
-  txt.textContent = state==="off"  ? "เชื่อมชีต"
-                  : state==="busy" ? "กำลังซิงก์"
-                  : state==="err"  ? (outbox.length ? "ค้าง "+outbox.length : "ต่อไม่ติด")
-                  : "ชีตซิงก์แล้ว";
-  chip.title = msg || (state==="off" ? "ยังไม่ได้เชื่อม Google Sheet — แตะเพื่อตั้งค่า" : "แตะเพื่อตั้งค่า");
+  $("syncTxt").textContent =
+      state==="off"  ? "เชื่อมชีต"
+    : state==="busy" ? "กำลังซิงก์"
+    : state==="err"  ? (outbox.length ? "ค้าง "+outbox.length : "ต่อไม่ติด")
+    : "ชีตซิงก์แล้ว";
+  chip.title = msg || "แตะเพื่อตั้งค่าการเชื่อมต่อ";
 }
 
 async function apiGet(action, extra){
   const u = new URL(cfg.url);
   u.searchParams.set("action", action);
   if(cfg.token) u.searchParams.set("token", cfg.token);
-  Object.entries(extra||{}).forEach(([k,v])=>u.searchParams.set(k,v));
+  Object.entries(extra||{}).forEach(([k,v])=> u.searchParams.set(k,v));
   const r = await fetch(u.toString(), {method:"GET", redirect:"follow", cache:"no-store"});
   const j = await r.json();
-  if(!j.ok) throw new Error(j.error||("HTTP "+r.status));
+  if(!j.ok) throw new Error(j.error || ("HTTP "+r.status));
   return j;
 }
-/* ใช้ text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script ตอบไม่ได้ */
+/* text/plain เพื่อเลี่ยง CORS preflight ที่ Apps Script ตอบไม่ได้ */
 async function apiPost(body){
   const r = await fetch(cfg.url, {method:"POST", redirect:"follow",
     headers:{"Content-Type":"text/plain;charset=utf-8"},
     body: JSON.stringify(Object.assign({token:cfg.token}, body))});
   const j = await r.json();
-  if(!j.ok) throw new Error(j.error||("HTTP "+r.status));
+  if(!j.ok) throw new Error(j.error || ("HTTP "+r.status));
   return j;
 }
 
-function queue(op){
-  if(!cfg.url) return;
-  outbox.push(op); saveOutbox(); setSync("busy"); flush();
-}
+/* หนึ่งก้อนในคิว = หนึ่งครั้งที่กดบันทึก = หนึ่งข้อความแจ้งเตือนใน LINE
+   ต่อให้ส่งช้าเพราะเน็ตหลุด ก็ยังนับเป็นครั้ง ๆ ไป ไม่ยุบรวมกัน */
 async function flush(){
   if(flushing || !unlocked || !cfg.url || !outbox.length) return;
-  if(navigator.onLine === false){ setSync("err","ออฟไลน์ — จะส่งให้เมื่อกลับมาออนไลน์"); return; }
+  if(navigator.onLine === false){ setSync("err","ออฟไลน์ — เก็บไว้ส่งเมื่อกลับมาออนไลน์"); return; }
   flushing = true; setSync("busy");
   try{
     while(outbox.length){
-      try{ await apiPost(outbox[0]); }
-      catch(e){
-        if(!/unknown action/.test(String(e.message||e))) throw e;
-        // สคริปต์ฝั่งชีตไม่รู้จักคำสั่งนี้ (เวอร์ชันเก่าค้างในคิว) — ทิ้งไปไม่ต้องวน
-      }
+      await apiPost(outbox[0]);
       outbox.shift(); saveOutbox();
     }
-    setSync("ok");
     flushing = false;
     await pull(true);
+    setSync("ok");
   }catch(e){
     setSync("err", String(e.message||e));
   }finally{ flushing = false; }
 }
 async function pull(force){
   if(pulling || !unlocked || !cfg.url) return;
-  if(outbox.length && !flushing){                  // มีของค้าง ส่งขึ้นก่อนเสมอ
-    await flush();
-    if(!outbox.length) return;                     // flush ดึงข้อมูลใหม่ให้เรียบร้อยแล้ว
-  }
+  if(outbox.length && !flushing){ await flush(); return; }
   pulling = true;
   if(syncState !== "ok") setSync("busy");
   try{
     const j = await apiGet("list");
-    if(mergeRemote(j.records||[])){ await persist(); render(); }
+    S.data = j.data || {};
+    LS.set(K_CACHE, JSON.stringify(S.data));
+    index(); render();
     setSync(outbox.length ? "busy" : "ok");
   }catch(e){
     setSync("err", String(e.message||e));
   }finally{ pulling = false; }
 }
-
-/* รวมข้อมูลจากชีตเข้ากับเครื่อง — ชีตคือแหล่งข้อมูลจริง
-   ยกเว้นห้องที่เพิ่งบันทึกแล้วยังส่งขึ้นไม่สำเร็จ อันนั้นของในเครื่องชนะไว้ก่อน */
-function mergeRemote(remote){
-  const before = JSON.stringify(records);
-  const map = new Map();
-  remote.forEach(rr=>{ if(rr && rr.room) map.set(rr.room, Object.assign({}, rr, {synced:true})); });
-  // ห้องที่ยังไม่เคยขึ้นชีตเลย เก็บไว้ก่อน (ห้องที่ขึ้นไปแล้วให้ยึดตามชีต)
-  records.forEach(r=>{ if(!r.synced && !map.has(r.room)) map.set(r.room, r); });
-  outbox.forEach(op=>{                                            // ของที่ยังค้างในคิวชนะเสมอ
-    if(op.action==="upsert") (op.records||[]).forEach(r=>map.set(r.room, r));
-    else if(op.action==="delete") map.delete(op.room);
-  });
-  records = [...map.values()].sort((a,b)=>a.room-b.room);
-  return JSON.stringify(records) !== before;
-}
-
 function startPolling(){
   if(pollTimer) clearInterval(pollTimer);
   if(!cfg.url) return;
   pollTimer = setInterval(()=>{
-    if(document.visibilityState === "visible") outbox.length ? flush() : pull();
-  }, POLL_MS);
+    if(document.visibilityState === "visible" && S.view !== "room") outbox.length ? flush() : pull();
+  }, 25000);
 }
-document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") pull(); });
-window.addEventListener("online",  ()=>{ flush(); pull(); });
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState === "visible" && S.view !== "room") pull();
+});
+window.addEventListener("online",  ()=>{ flush(); });
 window.addEventListener("offline", ()=> setSync("err","ออฟไลน์ — ข้อมูลถูกเก็บไว้ในเครื่องก่อน"));
 
-/* ================= หน้าล็อก (รหัสผ่าน) ================= */
-const lockEl = document.getElementById("lock");
-const dotsEl = document.getElementById("dots");
-const padEl  = document.getElementById("pad");
-const msgEl  = document.getElementById("lockmsg");
-
-dotsEl.innerHTML = Array.from({length:PIN_LEN},()=>"<i></i>").join("");
-padEl.innerHTML = [1,2,3,4,5,6,7,8,9].map(n=>`<button data-d="${n}">${n}</button>`).join("")
-  + `<button class="alt" data-a="del">ลบ</button><button data-d="0">0</button><button class="alt" data-a="ok">ตกลง</button>`;
-
-function drawDots(){
-  dotsEl.querySelectorAll("i").forEach((d,i)=>d.classList.toggle("on", i < pinBuf.length));
-}
-function lockMsg(t, bad){
-  msgEl.textContent = t;
-  msgEl.classList.toggle("bad", !!bad);
-}
-function shake(){
-  const b = lockEl.querySelector(".lockbox");
-  b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake");
+/* แถวล่าสุดของแต่ละห้องในแต่ละหมวด */
+function index(){
+  S.latest = {};
+  TOPICS.forEach(t=>{
+    const m = {};
+    (S.data[t.id]||[]).forEach(r=>{ const k = String(r["ห้อง"]||"").trim(); if(k) m[k] = r; });
+    S.latest[t.id] = m;
+  });
 }
 
-/** ตรวจรหัสกับฝั่งชีต (ของจริง) — ถ้าไม่ได้เชื่อมชีตค่อยเทียบกับ APP_PIN ในเครื่อง */
+/* =====================================================================
+   ฟอร์ม — draft ของห้องที่เปิดอยู่
+   ===================================================================== */
+function openRoom(room, topicId){
+  S.room = String(room);
+  S.floor = +floorOf(S.room);
+  if(topicId) S.topic = topicId;
+  S.draft = {}; S.base = {};
+  TOPICS.forEach(t=>{
+    const d = fromRow(t, S.latest[t.id] && S.latest[t.id][S.room], S.room);
+    S.draft[t.id] = d;
+    S.base[t.id]  = JSON.parse(JSON.stringify(d));
+  });
+  go("room");
+}
+
+/** แปลงแถวในชีตเป็นค่าในฟอร์ม — ไม่เคยตรวจ = ฟอร์มเปล่า */
+function fromRow(t, row, room){
+  const d = {vals:{}, note:""};
+  if(!row){
+    fieldsOf(t).forEach(f=>{
+      if(f.access) d.vals[f.col] = "เข้าตรวจได้";
+      else if(f.remember && S.remember[f.col]) d.vals[f.col] = S.remember[f.col];
+    });
+    return d;
+  }
+  d.note = row["หมายเหตุ"] || "";
+  fieldsOf(t).forEach(f=>{
+    const v = String(row[f.col]||"").trim();
+    if(v && v !== "-" && optsOf(f, room).some(o=> o.v === v)) d.vals[f.col] = v;
+    else if(f.remember && S.remember[f.col]) d.vals[f.col] = S.remember[f.col];
+  });
+
+  /* แถวเก่าที่ยังไม่มีคอลัมน์ "การเข้าห้อง" — เดาจากเกรดกับหมายเหตุให้ */
+  if(!d.vals[ACCESS]){
+    if(row[t.grade] !== "ไม่ได้ตรวจ") d.vals[ACCESS] = "เข้าตรวจได้";
+    else {
+      const hit = ACCESS_FIELD.opts.filter(o=> o.v !== "เข้าตรวจได้" && d.note.indexOf(o.v) === 0)[0];
+      d.vals[ACCESS] = hit ? hit.v : "ไม่มีกุญแจ";
+      if(hit) d.note = d.note.slice(hit.v.length).replace(/^\s*·?\s*/, "");
+    }
+  }
+  return d;
+}
+
+function judge(t, room, d){
+  const acc = d.vals[ACCESS];
+  if(!acc) return {grade:"ยังไม่ได้กรอก", todo:1, why:"ยังไม่ได้เลือกว่าเข้าห้องได้หรือไม่"};
+  if(acc !== "เข้าตรวจได้") return {grade:"ไม่ได้ตรวจ", why:acc};
+
+  const fs = scoreOf(t);
+  const miss = fs.filter(f=> !d.vals[f.col]);
+  if(miss.length) return {grade:"ยังไม่ได้กรอก", todo:miss.length,
+    why:"เหลืออีก "+miss.length+" หัวข้อ — หรือกด “ทั้งหมดปกติ” แล้วค่อยแก้เฉพาะจุดที่เสีย"};
+
+  const detail = [];
+  fs.forEach(f=>{
+    const o = optsOf(f, room).filter(x=> x.v === d.vals[f.col])[0];
+    if(o && (o.bad || o.warn)) detail.push({col:f.col, v:o.v, bad:!!o.bad});
+  });
+  const bads = detail.filter(x=>x.bad), warns = detail.filter(x=>!x.bad);
+  if(bads.length)  return {grade:"ไม่ผ่าน",   why:bads.map(x=>x.col+": "+x.v).join(" · ")};
+  if(warns.length) return {grade:"เกือบผ่าน", why:warns.map(x=>x.col+": "+x.v).join(" · ")+
+    " — แก้เฉพาะจุดได้ ไม่ต้องรื้อทั้งชุด"};
+  return {grade:"ผ่าน", why:"ไม่พบข้อบกพร่อง"};
+}
+
+/** หมวดนี้ถูกแก้จากตอนเปิดห้องไหม */
+function dirty(t){
+  return JSON.stringify(S.draft[t.id]) !== JSON.stringify(S.base[t.id]);
+}
+/** หมวดที่พร้อมบันทึกในรอบนี้ */
+function pending(){
+  return TOPICS.filter(t=> dirty(t) && !judge(t, S.room, S.draft[t.id]).todo);
+}
+function setAllOk(t){
+  const d = S.draft[t.id];
+  fieldsOf(t).forEach(f=>{ d.vals[f.col] = goodOf(f, S.room); });
+  Object.keys(S.remember).forEach(c=>{ if(d.vals[c] !== undefined && S.remember[c]) d.vals[c] = S.remember[c]; });
+}
+
+/* =====================================================================
+   วาดหน้าจอ
+   ===================================================================== */
+const VIEWS = {home:"viewHome", rooms:"viewRooms", sum:"viewSum", log:"viewLog", room:"viewRoom"};
+function go(view){
+  S.view = view;
+  Object.keys(VIEWS).forEach(v=> $(VIEWS[v]).classList.toggle("hide", v !== view));
+  $("tabbar").classList.toggle("hide", !(view==="rooms"||view==="sum"||view==="log"));
+  $("back").classList.toggle("hide", view === "home");
+  if(view==="rooms"||view==="sum"||view==="log") S.tab = view;
+  document.querySelectorAll(".tabbar button").forEach(b=>
+    b.setAttribute("aria-selected", String(b.dataset.t === S.tab)));
+  window.scrollTo(0,0);
+  render();
+}
+$("back").onclick = ()=> go(S.view === "room" ? S.tab : "home");
+document.querySelectorAll(".tabbar button").forEach(b=> b.onclick = ()=> go(b.dataset.t));
+
+function render(){
+  const t = TOPIC[S.topic];
+  $("ttl").firstChild.nodeValue = S.view === "home" ? "เช็คห้อง" : t.icon+" "+t.name;
+  $("sub").textContent =
+      S.view === "home" ? "เลือกหมวดที่จะตรวจ"
+    : S.view === "room" ? "ห้อง "+S.room+" · "+thDate(S.date)
+    : t.en + " · ทั้งหมด " + TOTAL_ROOMS + " ห้อง";
+
+  if(S.view === "home") renderHome();
+  if(S.view === "rooms") renderRooms();
+  if(S.view === "sum")  renderSum();
+  if(S.view === "log")  renderLog();
+  if(S.view === "room") renderRoom();
+  $("logCount").textContent = Object.keys(S.latest[S.topic]||{}).length;
+}
+
+/* ---------- หน้าเลือกหมวด ---------- */
+function renderHome(){
+  $("who").value = S.inspector;
+  $("dt").value = S.date;
+  $("dtNote").textContent = thDate(S.date) + " (เวลาไทย)";
+  $("whoNote").innerHTML = S.inspector ? "" : '<span class="warn">ยังไม่ได้ใส่ชื่อผู้ตรวจ</span>';
+
+  $("topicCards").innerHTML = TOPICS.map(t=>{
+    const m = S.latest[t.id] || {};
+    const rooms = Object.keys(m);
+    const c = {}; GRADES.forEach(g=> c[g]=0);
+    rooms.forEach(r=>{ const g = m[r][t.grade]; if(c[g]!==undefined) c[g]++; });
+    const seg = GRADES.map(g=> c[g] ? '<i style="flex:'+c[g]+';background:'+GC[g]+'"></i>' : "").join("")
+      || '<i style="flex:1;background:#E3E9E7"></i>';
+    return '<button class="tcard" data-t="'+t.id+'">'+
+      '<span class="ico">'+t.icon+'</span>'+
+      '<span class="b"><span class="n">'+t.name+'<em>'+t.en+'</em></span>'+
+      '<span class="s">ตรวจแล้ว '+rooms.length+'/'+TOTAL_ROOMS+' ห้อง'+
+      (c["ไม่ผ่าน"] ? ' · ต้องแก้ '+c["ไม่ผ่าน"]+' ห้อง' : '')+'</span>'+
+      '<span class="bar">'+seg+'</span></span><span class="go">›</span></button>';
+  }).join("");
+  document.querySelectorAll(".tcard").forEach(b=> b.onclick = ()=>{ S.topic = b.dataset.t; go("rooms"); });
+
+  /* ภาพรวมวันนี้ */
+  const rows = [];
+  TOPICS.forEach(t=>{
+    const today = (S.data[t.id]||[]).filter(r=> isoDate(r["วันที่ตรวจ"]) === S.date);
+    const c = {}; GRADES.forEach(g=> c[g]=0);
+    today.forEach(r=>{ const g = r[t.grade]; if(c[g]!==undefined) c[g]++; });
+    rows.push('<tr><td>'+t.icon+' '+t.name+'</td><td class="n">'+today.length+'</td>'+
+      '<td class="n ok">'+c["ผ่าน"]+'</td><td class="n">'+c["เกือบผ่าน"]+'</td>'+
+      '<td class="n no">'+c["ไม่ผ่าน"]+'</td><td class="n na">'+c["ไม่ได้ตรวจ"]+'</td></tr>');
+  });
+  $("todayBox").innerHTML = '<table><thead><tr><th>หมวด</th><th>บันทึก</th><th>ผ่าน</th>'+
+    '<th>เกือบ</th><th>ไม่ผ่าน</th><th>ไม่ได้ตรวจ</th></tr></thead><tbody>'+rows.join("")+'</tbody></table>';
+}
+
+function bindWho(inputId, dateId, noteId){
+  $(inputId).oninput = e=>{ S.inspector = e.target.value; saveMe();
+    const other = inputId==="who" ? "who2" : "who"; if($(other)) $(other).value = S.inspector;
+    if($("whoNote")) $("whoNote").innerHTML = S.inspector ? "" : '<span class="warn">ยังไม่ได้ใส่ชื่อผู้ตรวจ</span>'; };
+  $(dateId).onchange = e=>{
+    S.date = e.target.value || todayTH(); saveMe();
+    $("dt").value = S.date; $("dt2").value = S.date;
+    if($(noteId)) $(noteId).textContent = thDate(S.date) + " (เวลาไทย)";
+    if($("dtNote")) $("dtNote").textContent = thDate(S.date) + " (เวลาไทย)";
+    if($("dtNote2")) $("dtNote2").textContent = thDate(S.date) + " (เวลาไทย)";
+    render();
+  };
+}
+function saveMe(){ LS.set(K_ME, JSON.stringify({inspector:S.inspector, date:S.date, remember:S.remember})); }
+
+/* ---------- หน้าเลือกห้อง ---------- */
+function renderRooms(){
+  const t = TOPIC[S.topic], m = S.latest[t.id] || {};
+  $("fVal").textContent = S.floor;
+  $("floorNote").textContent = "ชั้น "+FLOOR_FROM+"–"+FLOOR_TO+" · ชั้นละ "+ROOMS_PER_FLOOR+" ห้อง";
+  $("floorJump").innerHTML = FLOORS.map(f=>
+    '<button data-f="'+f+'" aria-pressed="'+(f===S.floor)+'">'+f+'</button>').join("");
+  $("floorJump").querySelectorAll("button").forEach(b=>
+    b.onclick = ()=>{ S.floor = +b.dataset.f; renderRooms(); });
+
+  $("roomGrid").innerHTML = roomsOfFloor(S.floor).map(rn=>{
+    const r = m[rn], g = r ? r[t.grade] : "";
+    return '<button class="rbtn" data-r="'+rn+'"'+(g?' data-g="'+g+'"':'')+'>'+
+      '<i></i><div class="no">'+rn+'</div>'+
+      '<div class="st">'+(r ? showDate(r["วันที่ตรวจ"]) : "ยังไม่ตรวจ")+'</div></button>';
+  }).join("");
+  $("roomGrid").querySelectorAll(".rbtn").forEach(b=> b.onclick = ()=> openRoom(b.dataset.r));
+}
+$("fMinus").onclick = ()=>{ if(S.floor>FLOOR_FROM){ S.floor--; renderRooms(); } };
+$("fPlus").onclick  = ()=>{ if(S.floor<FLOOR_TO){ S.floor++; renderRooms(); } };
+
+/* ---------- หน้าเช็ก ---------- */
+function renderRoom(){
+  const t = TOPIC[S.topic], d = S.draft[t.id], room = S.room;
+  $("rNo").textContent = room;
+  $("rType").textContent = (ROOM_TYPE[unitOf(room)]||"") +
+    (S.topic==="silicone" ? " · " + (isTopOnly(room) ? "ยิงขอบบน" : "ยิงครบทุกด้าน") : "");
+  const rec = (S.latest[t.id]||{})[room];
+  $("rSub").textContent = "ชั้น "+floorOf(room)+" · ห้อง "+String(room).slice(-2)+" · " +
+    (rec ? "เคยบันทึก "+showDate(rec["วันที่ตรวจ"])+" — แก้แล้วบันทึกทับได้" : "ยังไม่เคยบันทึกหมวดนี้");
+  $("who2").value = S.inspector; $("dt2").value = S.date;
+  $("dtNote2").textContent = thDate(S.date) + " (เวลาไทย)";
+  $("rPrev").disabled = (room === String(FLOOR_FROM*100+1));
+  $("rNext").disabled = (room === String(FLOOR_TO*100+ROOMS_PER_FLOOR));
+
+  /* แถบหมวด — เห็นทุกหมวดของห้องนี้ในหน้าเดียว กดสลับได้โดยไม่เสียของที่กรอกไว้ */
+  $("topicTabs").innerHTML = TOPICS.map(x=>{
+    const v = judge(x, room, S.draft[x.id]);
+    const had = (S.latest[x.id]||{})[room];
+    const g = v.todo ? (had ? String(had[x.grade]||"ยังไม่ตรวจ") : "ยังไม่ตรวจ") : v.grade;
+    return '<button class="ttab" data-t="'+x.id+'" aria-selected="'+(x.id===S.topic)+'">'+
+      (dirty(x) ? '<span class="dirty"></span>' : '')+
+      '<span class="n">'+x.icon+' '+x.name+'</span>'+
+      '<span class="g"><span class="badge" data-g="'+g+'">'+g+'</span>'+
+      (dirty(x) ? ' <span style="color:var(--near)">· แก้ไขค้างอยู่</span>' : '')+'</span></button>';
+  }).join("");
+  $("topicTabs").querySelectorAll(".ttab").forEach(b=>
+    b.onclick = ()=>{ S.topic = b.dataset.t; renderRoom(); window.scrollTo(0,0); });
+
+  /* ฟอร์มของหมวดที่เลือก */
+  const off = d.vals[ACCESS] && d.vals[ACCESS] !== "เข้าตรวจได้";
+  $("btnAllOk").classList.toggle("hide", !!off);
+  $("formBox").innerHTML = t.sections.map(sec=>{
+    const isAccess = sec.fields.length===1 && sec.fields[0].access;
+    if(off && !isAccess) return "";
+    return '<div class="card"><div class="cap">'+sec.cap+'</div>'+
+      sec.fields.map(f=>{
+        const opts = optsOf(f, room), cur = d.vals[f.col] || "";
+        return '<div class="fld"><div class="lab">'+val(f.label, room)+
+          (f.en ? ' <span>'+f.en+'</span>' : '')+'</div><div class="opts" data-c="'+f.col+'">'+
+          opts.map(o=>'<button class="opt" data-v="'+o.v+'" data-k="'+
+            (f.plain?"plain":o.bad?"bad":o.warn?"warn":"good")+'" aria-pressed="'+
+            (o.v===cur)+'">'+o.v+'</button>').join("")+'</div>'+
+          (f.hint ? '<div class="hint">'+f.hint+'</div>' : '')+'</div>';
+      }).join("")+'</div>';
+  }).join("") +
+  '<div class="card"><div class="cap">Note · หมายเหตุ</div><div class="fld">'+
+  '<textarea id="fNote" placeholder="เช่น สวิตช์ม่านทึบกดแล้วไม่ทำงาน / ตัดขอบสวยแต่สีผิดสเปก"></textarea></div></div>';
+
+  $("fNote").value = d.note;
+  $("fNote").oninput = e=>{ d.note = e.target.value; refreshSave(); };
+  $("formBox").querySelectorAll(".opts").forEach(g=>{
+    g.onclick = e=>{
+      const b = e.target.closest(".opt"); if(!b) return;
+      const col = g.dataset.c;
+      d.vals[col] = (d.vals[col] === b.dataset.v) ? "" : b.dataset.v;
+      const f = fieldsOf(t).filter(x=>x.col===col)[0];
+      if(f && f.remember && d.vals[col]){ S.remember[col] = d.vals[col]; saveMe(); }
+      if(col === ACCESS && d.vals[col] !== "เข้าตรวจได้"){
+        scoreOf(t).forEach(x=> d.vals[x.col] = "");     /* เข้าไม่ได้ = ไม่มีผลตรวจให้กรอก */
+      }
+      renderRoom();
+    };
+  });
+
+  const v = judge(t, room, d);
+  $("verdict").dataset.g = v.grade; $("vG").textContent = v.grade; $("vW").textContent = v.why;
+  refreshSave();
+}
+$("btnAllOk").onclick = ()=>{ setAllOk(TOPIC[S.topic]); renderRoom(); };
+$("rPrev").onclick = ()=> stepRoom(-1);
+$("rNext").onclick = ()=> stepRoom(1);
+function stepRoom(dir){
+  const all = FLOORS.reduce((a,f)=> a.concat(roomsOfFloor(f)), []);
+  const i = all.indexOf(S.room);
+  if(i < 0) return;
+  const n = all[i+dir];
+  if(n) openRoom(n);
+}
+
+function refreshSave(){
+  const list = pending();
+  const btn = $("btnSave");
+  btn.disabled = !list.length;
+  btn.textContent = list.length > 1 ? "บันทึก "+list.length+" หมวด" : "บันทึก";
+  $("saveInfo").textContent = list.length
+    ? "จะบันทึก: " + list.map(t=>t.icon+" "+t.name).join(" + ")
+    : "ยังไม่มีอะไรต้องบันทึก";
+  const half = TOPICS.filter(t=> dirty(t) && judge(t, S.room, S.draft[t.id]).todo);
+  $("saveMsg").className = "msg";
+  $("saveMsg").textContent = half.length
+    ? "กรอก " + half.map(t=>t.name).join(", ") + " ยังไม่ครบ จะยังไม่ถูกบันทึก"
+    : (list.length ? "กดครั้งเดียว แจ้งเตือนเข้าไลน์ครั้งเดียว" : "");
+}
+
+/* ---------- บันทึก : หนึ่งครั้งที่กด = หนึ่ง request = หนึ่งข้อความ ---------- */
+$("btnSave").onclick = async ()=>{
+  const list = pending();
+  if(!list.length) return;
+  if(!S.inspector.trim()){
+    toast("ใส่ชื่อผู้ตรวจก่อน");
+    $("who2").focus();
+    return;
+  }
+  const entries = list.map(t=>{
+    const d = S.draft[t.id], v = judge(t, S.room, d);
+    const off = v.grade === "ไม่ได้ตรวจ";
+    const values = {};
+    Object.assign(values, val(t.auto, S.room) || {});
+    fieldsOf(t).forEach(f=>{
+      if(f.access) values[f.col] = d.vals[f.col] || "";
+      else values[f.col] = off ? "-" : (d.vals[f.col] || "");
+    });
+    values[t.grade] = v.grade;
+    return {topic:t.id, room:S.room, floor:floorOf(S.room), values:values, note:d.note};
+  });
+  const job = {inspector:S.inspector.trim(), date:S.date, entries:entries};
+
+  $("btnSave").disabled = true;
+  $("saveMsg").className = "msg"; $("saveMsg").textContent = "กำลังบันทึก…";
+
+  if(!cfg.url){ openCfg(); $("saveMsg").textContent = "ยังไม่ได้เชื่อมชีต"; refreshSave(); return; }
+
+  try{
+    setSync("busy");
+    await apiPost(job);
+    $("saveMsg").className = "msg ok";
+    $("saveMsg").textContent = "บันทึกแล้ว " + entries.length + " หมวด · แจ้งเตือนเข้าไลน์แล้ว 1 ครั้ง";
+    toast("ห้อง "+S.room+" บันทึกแล้ว");
+    await pull(true);
+    afterSave();
+  }catch(e){
+    outbox.push(job); saveOutbox();          /* เก็บไว้ส่งทีหลัง ยังนับเป็นหนึ่งครั้งเหมือนเดิม */
+    setSync("err", String(e.message||e));
+    $("saveMsg").className = "msg err";
+    $("saveMsg").textContent = "ส่งไม่สำเร็จ เก็บไว้ในเครื่องก่อน จะส่งให้เองเมื่อเน็ตกลับมา";
+    afterSave();
+  }
+};
+/* หลังบันทึก: ตั้งฐานเทียบใหม่ ไม่ให้ค้างว่ายังแก้ค้างอยู่ */
+function afterSave(){
+  TOPICS.forEach(t=>{
+    const rec = (S.latest[t.id]||{})[S.room];
+    S.draft[t.id] = rec ? fromRow(t, rec, S.room) : S.draft[t.id];
+    S.base[t.id] = JSON.parse(JSON.stringify(S.draft[t.id]));
+  });
+  renderRoom();
+}
+
+/* ---------- สรุป ---------- */
+function renderSum(){
+  const t = TOPIC[S.topic], m = S.latest[t.id] || {};
+  const rooms = Object.keys(m);
+  const c = {}; GRADES.forEach(g=> c[g]=0);
+  rooms.forEach(r=>{ const g = m[r][t.grade]; if(c[g]!==undefined) c[g]++; });
+
+  $("score").innerHTML = GRADES.map(g=>
+    '<div class="sc" data-g="'+g+'"><div class="n">'+c[g]+'</div><div class="t">'+g+'</div></div>').join("");
+  $("sumBar").innerHTML = GRADES.map(g=> c[g] ?
+    '<i style="flex:'+c[g]+';background:'+GC[g]+'"></i>' : "").join("") ||
+    '<i style="flex:1;background:#E3E9E7"></i>';
+  $("progressTxt").textContent = "ตรวจแล้ว "+rooms.length+" จาก "+TOTAL_ROOMS+" ห้อง ("+
+    (rooms.length/TOTAL_ROOMS*100).toFixed(1)+"%) · เหลืออีก "+(TOTAL_ROOMS-rooms.length)+" ห้อง";
+
+  $("floorBody").innerHTML = FLOORS.map(f=>{
+    const rs = roomsOfFloor(f).filter(rn=> m[rn]);
+    if(!rs.length) return "";
+    const cc = {}; GRADES.forEach(g=> cc[g]=0);
+    rs.forEach(rn=>{ const g = m[rn][t.grade]; if(cc[g]!==undefined) cc[g]++; });
+    const seg = GRADES.map(g=> cc[g] ?
+      '<i style="width:'+(cc[g]/rs.length*100)+'%;background:'+GC[g]+'"></i>' : "").join("");
+    return '<tr><td class="k">'+f+'</td><td class="n">'+rs.length+"/"+ROOMS_PER_FLOOR+'</td>'+
+      '<td class="n ok">'+cc["ผ่าน"]+'</td><td class="n">'+cc["เกือบผ่าน"]+'</td>'+
+      '<td class="n no">'+cc["ไม่ผ่าน"]+'</td><td class="n na">'+cc["ไม่ได้ตรวจ"]+'</td>'+
+      '<td><div class="minibar">'+seg+'</div></td></tr>';
+  }).join("") || '<tr><td class="empty">ยังไม่มีข้อมูล</td></tr>';
+
+  /* ข้อบกพร่อง: นับตามหัวข้อว่ามีกี่ห้องที่ค่าไม่ใช่ค่าปกติของห้องนั้น */
+  const defects = scoreOf(t).filter(f=>!f.plain).map(f=>{
+    const hit = rooms.filter(rn=> notGood(f, rn, m[rn][f.col]));
+    return [f.col, hit.length];
+  }).filter(d=> d[1] > 0).sort((a,b)=> b[1]-a[1]);
+  if(c["ไม่ได้ตรวจ"]) defects.push(["เข้าห้องไม่ได้", c["ไม่ได้ตรวจ"]]);
+  const mx = defects.length ? Math.max.apply(null, defects.map(d=>d[1])) : 1;
+  $("defectBody").innerHTML = defects.map(([l,n])=>
+    '<tr><td>'+l+'</td><td style="width:45%"><div class="minibar"><i style="width:'+
+    (n/mx*100)+'%;background:#14605A"></i></div></td><td class="n">'+n+'</td></tr>').join("")
+    || '<tr><td class="empty">ยังไม่พบข้อบกพร่อง</td></tr>';
+
+  const fix = rooms.filter(rn=> m[rn][t.grade]==="ไม่ผ่าน" || m[rn][t.grade]==="เกือบผ่าน").sort();
+  $("fixBody").innerHTML = fix.length ? fix.map(rn=>{
+    const row = m[rn];
+    const why = scoreOf(t).filter(f=> !f.plain && notGood(f, rn, row[f.col]))
+      .map(f=> f.col+": "+row[f.col]);
+    return '<tr data-r="'+rn+'"><td class="k">'+rn+'</td><td>'+(why.join(" · ")||"-")+'</td>'+
+      '<td style="text-align:right"><span class="badge" data-g="'+row[t.grade]+'">'+row[t.grade]+'</span></td></tr>';
+  }).join("") : '<tr><td class="empty">ยังไม่มีห้องที่ต้องแก้</td></tr>';
+  $("fixBody").querySelectorAll("tr[data-r]").forEach(tr=>
+    tr.onclick = ()=> openRoom(tr.dataset.r));
+}
+
+/* ---------- บันทึกแล้ว ---------- */
+function renderLog(){
+  const t = TOPIC[S.topic], m = S.latest[t.id] || {};
+  const cols = scoreOf(t).filter(f=>!f.plain).map(f=>f.col);
+  $("logHead").innerHTML = '<th>ห้อง</th>' + cols.map(c=>'<th>'+c+'</th>').join("") +
+    '<th>'+t.grade+'</th><th>วันที่</th><th>ผู้ตรวจ</th>';
+
+  let html = "";
+  FLOORS.forEach(f=>{
+    const rs = roomsOfFloor(f).filter(rn=> m[rn]);
+    if(!rs.length) return;
+    html += '<tr class="band"><td colspan="'+(cols.length+4)+'">ชั้น '+f+
+      '<span>'+rs.length+"/"+ROOMS_PER_FLOOR+' ห้อง</span></td></tr>';
+    rs.forEach(rn=>{
+      const r = m[rn];
+      html += '<tr data-r="'+rn+'"><td class="k">'+rn+'</td>'+
+        cols.map(col=>{
+          const f = scoreOf(t).filter(x=> x.col === col)[0];
+          const v = String(r[col]||"").trim() || "-";
+          return '<td class="'+(v==="-" ? "na" : (notGood(f, rn, v) ? "no" : "ok"))+'">'+v+'</td>';
+        }).join("") +
+        '<td><span class="badge" data-g="'+r[t.grade]+'">'+(r[t.grade]||"")+'</span></td>'+
+        '<td>'+showDate(r["วันที่ตรวจ"])+'</td><td>'+(r["ผู้ตรวจ"]||"")+'</td></tr>';
+    });
+  });
+  $("logBody").innerHTML = html || '<tr><td colspan="9" class="empty">ยังไม่มีข้อมูล</td></tr>';
+  $("logBody").querySelectorAll("tr[data-r]").forEach(tr=>
+    tr.onclick = ()=> openRoom(tr.dataset.r));
+}
+
+/* =====================================================================
+   ตั้งค่าการเชื่อมต่อ
+   ===================================================================== */
+const modal = $("cfgModal");
+function openCfg(){
+  $("cfgUrl").value = cfg.url||"";
+  $("cfgToken").value = cfg.token||"";
+  $("cfgNote").textContent = syncMsg ? "สถานะล่าสุด: "+syncMsg : (cfg.url ? "เชื่อมอยู่กับ web app นี้" : "");
+  modal.classList.remove("hide");
+}
+const closeCfg = ()=> modal.classList.add("hide");
+$("syncChip").onclick = openCfg;
+$("cfgClose").onclick = closeCfg;
+modal.onclick = e=>{ if(e.target === modal) closeCfg(); };
+$("cfgSave").onclick = async ()=>{
+  cfg = {url:$("cfgUrl").value.trim(), token:$("cfgToken").value.trim()};
+  saveCfg(); startPolling(); closeCfg();
+  if(!cfg.url){ setSync("off"); return toast("ยกเลิกการเชื่อมต่อแล้ว"); }
+  toast("เชื่อมชีตแล้ว — กำลังซิงก์");
+  await flush(); await pull(true);
+};
+$("cfgTest").onclick = async ()=>{
+  const url = $("cfgUrl").value.trim(), note = $("cfgNote");
+  if(!url) return note.textContent = "ยังไม่ได้ใส่ URL";
+  note.textContent = "กำลังทดสอบ…";
+  const keep = cfg;
+  cfg = {url, token:$("cfgToken").value.trim()};
+  try{
+    await apiGet("ping");
+    const j = await apiGet("list");
+    note.textContent = "เชื่อมได้ ✓ " + TOPICS.map(t=>
+      t.name+" "+((j.data&&j.data[t.id])||[]).length+" แถว").join(" · ");
+  }catch(e){
+    note.textContent = "เชื่อมไม่ได้: " + (e.message||e);
+  }finally{ cfg = keep; }
+};
+$("cfgOff").onclick = ()=>{
+  cfg = {url:"", token:""}; saveCfg(); outbox = []; saveOutbox();
+  if(pollTimer) clearInterval(pollTimer);
+  setSync("off"); closeCfg(); toast("ยกเลิกการเชื่อมต่อแล้ว");
+};
+
+/* =====================================================================
+   หน้าล็อก — ใช้เมื่อ Apps Script ตั้ง TOKEN ไว้
+   ===================================================================== */
+const lockEl = $("lock");
+$("lockDots").innerHTML = Array.from({length:PIN_LEN},()=>"<i></i>").join("");
+$("lockKeys").innerHTML = [1,2,3,4,5,6,7,8,9].map(n=>'<button data-d="'+n+'">'+n+'</button>').join("")
+  + '<button class="alt" data-a="del">ลบ</button><button data-d="0">0</button>'
+  + '<button class="alt" data-a="ok">ตกลง</button>';
+const drawDots = ()=> $("lockDots").querySelectorAll("i").forEach((d,i)=>
+  d.classList.toggle("on", i < pinBuf.length));
+function lockMsg(t, bad){ $("lockMsg").textContent = t; $("lockMsg").classList.toggle("bad", !!bad); }
+function shake(){ const b = lockEl.querySelector(".lockbox");
+  b.classList.remove("shake"); void b.offsetWidth; b.classList.add("shake"); }
+
 async function tryPin(p){
-  if(!cfg.url) return APP_PIN ? p === APP_PIN : true;
   const keep = cfg.token;
   cfg.token = p;
-  try{
-    await apiGet("verify");
-    saveCfg();
-    return true;
-  }catch(e){
+  try{ await apiGet("verify"); saveCfg(); return true; }
+  catch(e){
     cfg.token = keep;
     if(/unauthorized/.test(String(e.message||e))) return false;
-    // ต่อเน็ตไม่ติด — ยอมให้เข้าถ้าตรงกับรหัสที่เคยใช้ได้ในเครื่องนี้
-    if(keep && p === keep){ cfg.token = p; return true; }
+    if(keep && p === keep){ cfg.token = p; return true; }   /* เน็ตไม่ติด — ใช้รหัสเดิมที่เคยผ่าน */
     throw e;
   }
 }
-
-function openLock(){
-  unlocked = false; pinBuf = ""; drawDots();
-  if(pollTimer) clearInterval(pollTimer);
-  lockMsg("ใส่รหัสเพื่อเข้าใช้งาน");
-  lockEl.classList.remove("hide");
-}
-function passLock(){
-  unlocked = true; pinBuf = "";
-  lockEl.classList.add("hide");
-  render();
-  startSync();
-}
-
 async function submitPin(){
-  if(pinBuf.length < 1) return;
+  if(!pinBuf.length) return;
   const p = pinBuf;
   lockMsg("กำลังตรวจรหัส…");
   try{
@@ -670,305 +1191,56 @@ async function submitPin(){
     pinBuf = ""; drawDots(); lockMsg("ต่ออินเทอร์เน็ตไม่ได้ ลองใหม่อีกครั้ง", true);
   }
 }
-padEl.onclick = e=>{
+$("lockKeys").onclick = e=>{
   const b = e.target.closest("button"); if(!b) return;
-  if(b.dataset.a === "del"){ pinBuf = pinBuf.slice(0,-1); drawDots(); return; }
+  if(b.dataset.a === "del"){ pinBuf = pinBuf.slice(0,-1); return drawDots(); }
   if(b.dataset.a === "ok") return submitPin();
   if(pinBuf.length >= PIN_LEN) return;
   pinBuf += b.dataset.d; drawDots();
   if(pinBuf.length === PIN_LEN) submitPin();
 };
-document.addEventListener("keydown", e=>{
-  if(lockEl.classList.contains("hide")) return;
-  if(/^[0-9]$/.test(e.key)){ if(pinBuf.length < PIN_LEN){ pinBuf += e.key; drawDots();
-      if(pinBuf.length === PIN_LEN) submitPin(); } }
-  else if(e.key === "Backspace"){ pinBuf = pinBuf.slice(0,-1); drawDots(); }
-  else if(e.key === "Enter") submitPin();
-});
-
-/** ต้องใส่รหัสไหม แล้วปลดล็อกให้เลยถ้ารหัสเดิมยังใช้ได้ */
+function passLock(){
+  unlocked = true; pinBuf = "";
+  lockEl.classList.add("hide");
+  startPolling(); flush(); pull(true);
+}
 async function gate(){
-  let needed = !!APP_PIN;
-  if(cfg.url){
-    try{ const j = await apiGet("ping"); needed = !!j.locked || !!APP_PIN; }
-    catch(e){ needed = !!(cfg.token || APP_PIN); }   // ออฟไลน์ — เคยตั้งรหัสไว้ก็ยังล็อก
+  if(!cfg.url){ unlocked = true; setSync("off"); $("setupWarn").classList.remove("hide"); return; }
+  try{
+    const j = await apiGet("ping");
+    if(!j.locked) return passLock();
+  }catch(e){
+    /* ต่อไม่ติดตอนเปิด — ถ้าไม่เคยตั้งรหัสก็ให้ใช้งานต่อ แล้วลองซิงก์ใหม่เรื่อย ๆ */
+    if(!cfg.token){ setSync("err", String(e.message||e)); return passLock(); }
   }
-  if(!needed) return passLock();
   if(cfg.token){
     try{ if(await tryPin(cfg.token)) return passLock(); }catch(e){}
   }
-  openLock();
+  unlocked = false; pinBuf = ""; drawDots();
+  lockMsg("ใส่รหัสเพื่อเข้าใช้งาน");
+  lockEl.classList.remove("hide");
 }
 
-/* ---------- config modal ---------- */
-const modal = document.getElementById("cfgModal");
-function openCfg(){
-  document.getElementById("cfgUrl").value   = cfg.url||"";
-  document.getElementById("cfgToken").value = cfg.token||"";
-  document.getElementById("cfgNote").textContent =
-    syncMsg ? "สถานะล่าสุด: "+syncMsg : (cfg.url ? "เชื่อมอยู่กับ web app นี้" : "");
-  modal.classList.remove("hide");
-}
-function closeCfg(){ modal.classList.add("hide"); }
-document.getElementById("syncChip").onclick = openCfg;
-document.getElementById("cfgClose").onclick = closeCfg;
-modal.onclick = e=>{ if(e.target===modal) closeCfg(); };
-document.getElementById("cfgSave").onclick = async ()=>{
-  cfg = {url:document.getElementById("cfgUrl").value.trim(),
-         token:document.getElementById("cfgToken").value.trim()};
-  saveCfg(); startPolling();
-  if(!cfg.url){ setSync("off"); closeCfg(); return toast("ยกเลิกการเชื่อมต่อแล้ว"); }
-  closeCfg(); toast("เชื่อมชีตแล้ว — กำลังซิงก์");
-  if(records.length) queue({action:"upsert", records});
-  await flush(); await pull(true);
-};
-document.getElementById("cfgTest").onclick = async ()=>{
-  const url = document.getElementById("cfgUrl").value.trim();
-  const note = document.getElementById("cfgNote");
-  if(!url) return note.textContent = "ยังไม่ได้ใส่ URL";
-  note.textContent = "กำลังทดสอบ…";
-  const keep = cfg;
-  cfg = {url, token:document.getElementById("cfgToken").value.trim()};
+/* =====================================================================
+   เริ่มต้น
+   ===================================================================== */
+(function init(){
+  loadCfg();
+  try{ outbox = JSON.parse(LS.get(K_OUT)||"[]"); }catch(e){ outbox = []; }
   try{
-    const j = await apiGet("ping");
-    note.textContent = j.sheet ? `เชื่อมได้ ✓ แท็บ “${j.sheet}” มี ${j.count} แถว`
-                               : "เชื่อมได้ ✓ แต่รหัสผ่านไม่ถูก — แก้ช่องรหัสผ่านให้ตรงกับ TOKEN";
-  }catch(e){
-    note.textContent = "เชื่อมไม่ได้: " + (e.message||e);
-  }finally{ cfg = keep; }
-};
-document.getElementById("cfgOff").onclick = ()=>{
-  cfg = {url:"", token:""}; saveCfg(); outbox = []; saveOutbox();
-  if(pollTimer) clearInterval(pollTimer);
-  setSync("off"); closeCfg(); toast("ยกเลิกการเชื่อมต่อแล้ว");
-};
+    const me = JSON.parse(LS.get(K_ME)||"null");
+    if(me){ S.inspector = me.inspector||""; S.remember = me.remember||{};
+            if(me.date && me.date === todayTH()) S.date = me.date; }
+  }catch(e){}
+  try{ S.data = JSON.parse(LS.get(K_CACHE)||"{}") || {}; }catch(e){ S.data = {}; }
 
-/* ---------- build matrix rows ---------- */
-document.getElementById("mx").innerHTML = YN.map(([en,th,a,b])=>`
-  <tr><td>${th} <span style="color:var(--mute);font-weight:400;font-size:11px">${en}</span></td>
-  ${[a,b].map(k=>`<td><div class="yn" data-k="${k}">
-    <button class="y" data-v="good" title="good">✓</button>
-    <button class="n" data-v="bad" title="bad">✕</button></div></td>`).join("")}</tr>`).join("");
-
-/* ---------- build unit grid ---------- */
-const unitsEl = document.getElementById("units");
-unitsEl.innerHTML = Array.from({length:12},(_,i)=>
-  `<button class="unit" data-u="${i+1}"><span class="dot"></span>${pad(i+1)}</button>`).join("");
-
-/* ---------- render ---------- */
-function render(){
-  document.getElementById("plate").textContent = room();
-  document.getElementById("rtype").textContent = TYPE[unit];
-  document.getElementById("rsub").textContent = `ชั้น ${floor} · ห้อง ${pad(unit)} · ${today()}`;
-  document.getElementById("fval").textContent = floor;
-
-  unitsEl.querySelectorAll(".unit").forEach(b=>{
-    const u = +b.dataset.u;
-    b.setAttribute("aria-pressed", u===unit);
-    const r = recOf(floor*100+u);
-    const dot = b.querySelector(".dot");
-    dot.className = "dot" + (r ? (r.result==="PASS"?" ok":" bad") : "");
-  });
-  document.querySelectorAll("#brandChips .chip").forEach(b=>
-    b.setAttribute("aria-pressed", b.dataset.brand===brand));
-
-  document.querySelectorAll(".item[data-k]").forEach(it=>{
-    const k = it.dataset.k;
-    it.querySelectorAll(".chip").forEach(c=>c.setAttribute("aria-pressed", checks[k]===c.dataset.v));
-  });
-  document.querySelectorAll(".yn").forEach(g=>{
-    const k = g.dataset.k;
-    g.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", checks[k]===b.dataset.v));
-  });
-  document.getElementById("note").value = note;
-
-  const v = verdict(checks);
-  const led = document.getElementById("led");
-  led.className = "led" + (v.s==="PASS"?" ok":v.s==="DEFECT"?" bad":"");
-  const vt = document.getElementById("vtext"), vd = document.getElementById("vdesc");
-  vt.textContent = v.s;
-  vt.style.color = v.s==="PASS"?"var(--ok)":v.s==="DEFECT"?"var(--bad)":"var(--mute)";
-  vd.textContent = v.s==="รอตรวจ" ? `เหลืออีก ${v.n} หัวข้อ`
-                 : v.s==="DEFECT" ? `พบปัญหา ${v.n} จุด` : "ปกติทุกหัวข้อ";
-  const btn = document.getElementById("save");
-  btn.disabled = v.s==="รอตรวจ";
-  btn.textContent = recOf(room()) ? "อัปเดต" : "บันทึก";
-
-  document.getElementById("cnt").textContent = records.length;
-  renderList(); renderSum();
-}
-
-function renderSum(){
-  const total = records.length;
-  const bad = records.filter(r=>r.result==="DEFECT").length;
-  document.getElementById("kTotal").textContent = total;
-  document.getElementById("kPass").textContent = total - bad;
-  document.getElementById("kBad").textContent = bad;
-
-  const catEl = document.getElementById("cats");
-  if(!total){ catEl.innerHTML = `<div class="empty" style="margin:12px;border:0">ยังไม่มีข้อมูล — ตรวจห้องแรกก่อน</div>`;
-    document.getElementById("floors").innerHTML = ""; document.getElementById("brands").innerHTML = ""; return; }
-
-  const data = CATS.map(c=>{
-    const hit = records.filter(r=>c.keys.some(k=>r.checks[k] && r.checks[k]!==GOOD[k]));
-    const cnt = k => records.filter(r=>r.checks[k] && r.checks[k]!==GOOD[k]).length;
-    const sh = c.keys.filter(k=>k.endsWith("Sheer")).reduce((a,k)=>a+cnt(k),0);
-    const cu = c.keys.filter(k=>k.endsWith("Curtain")).reduce((a,k)=>a+cnt(k),0);
-    return {...c, rooms:hit.map(r=>r.room).sort((a,b)=>a-b), sh, cu};
-  }).sort((a,b)=>b.rooms.length-a.rooms.length);
-
-  catEl.innerHTML = data.map(c=>{
-    const n = c.rooms.length, pct = Math.round(n/total*100);
-    return `<div class="cat">
-      <div class="n ${n?"":"zero"}">${n}</div>
-      <div class="body">
-        <div class="t">${c.t}<em>${c.en}</em></div>
-        <div class="track"><div class="fill" style="width:${pct}%"></div></div>
-        ${n?`<div class="rooms">${c.rooms.map(r=>`<button class="rchip" data-r="${r}">${r}</button>`).join("")}</div>
-             ${c.keys.length>1?`<div class="split">แยกจุด: ม่านโปร่ง ${c.sh} · ม่านทึบ ${c.cu}</div>`:""}`
-          :`<div class="split">ไม่พบปัญหา</div>`}
-      </div></div>`;
-  }).join("");
-
-  const group = (keyFn, label) => {
-    const m = new Map();
-    records.forEach(r=>{ const k = keyFn(r);
-      const o = m.get(k) || {n:0,b:0}; o.n++; if(r.result==="DEFECT") o.b++; m.set(k,o); });
-    return [...m.entries()].sort((a,b)=>String(a[0]).localeCompare(String(b[0]),"th",{numeric:true}))
-      .map(([k,o])=>`<tr>
-        <td class="${label==="f"?"f":""}">${label==="f"?"ชั้น "+k:k}</td>
-        <td class="b"><div class="track" style="margin:0"><div class="fill" style="width:${Math.round(o.b/o.n*100)}%"></div></div></td>
-        <td class="r">${o.b}/${o.n} ห้อง</td></tr>`).join("");
-  };
-  document.getElementById("floors").innerHTML = group(r=>r.floor,"f");
-  document.getElementById("brands").innerHTML = group(r=>r.brand,"b");
-}
-function renderList(){
-  const el = document.getElementById("recs");
-  if(!records.length){ el.innerHTML = `<div class="empty">ยังไม่มีห้องที่บันทึก<br>ตรวจห้องแรกแล้วกดบันทึก</div>`; return; }
-  const sorted = [...records].sort((a,b)=>a.room-b.room);
-  el.innerHTML = sorted.map(r=>`
-    <div class="rec" data-r="${r.room}">
-      <div class="no">${r.room}</div>
-      <div class="txt">${r.type} · ${r.brand}${r.note?" · "+r.note:""}</div>
-      <div class="pill ${r.result==="PASS"?"ok":"bad"}">${r.result}</div>
-    </div>`).join("");
-}
-
-/* ---------- events ---------- */
-document.getElementById("fup").onclick = ()=>{ if(floor<20){floor++; loadRoom();} };
-document.getElementById("fdown").onclick = ()=>{ if(floor>1){floor--; loadRoom();} };
-unitsEl.onclick = e=>{ const b=e.target.closest(".unit"); if(!b) return; unit=+b.dataset.u; loadRoom(); };
-document.getElementById("brandChips").onclick = e=>{
-  const b=e.target.closest(".chip"); if(!b) return; brand=b.dataset.brand; persist(); render(); };
-
-document.querySelectorAll(".item[data-k]").forEach(it=>{
-  it.onclick = e=>{ const c=e.target.closest(".chip"); if(!c) return;
-    const k=it.dataset.k; checks[k] = checks[k]===c.dataset.v ? undefined : c.dataset.v; render(); };
-});
-document.getElementById("mx").onclick = e=>{
-  const b=e.target.closest("button"); if(!b) return;
-  const k=b.closest(".yn").dataset.k;
-  checks[k] = checks[k]===b.dataset.v ? undefined : b.dataset.v; render(); };
-document.getElementById("master").onclick = ()=>{ KEYS.forEach(k=>checks[k]=GOOD[k]); render(); };
-document.getElementById("note").oninput = e=> note = e.target.value;
-document.getElementById("inspector").oninput = e=>{ inspector = e.target.value; persist(); };
-
-function loadRoom(){
-  const r = recOf(room());
-  checks = r ? {...r.checks} : {};
-  note = r ? r.note : "";
-  render();
-}
-document.getElementById("save").onclick = ()=>{
-  const v = verdict(checks); if(v.s==="รอตรวจ") return;
-  const rec = {date:today(), floor, room:room(), type:TYPE[unit], brand,
-               checks:{...checks}, result:v.s, note, by:inspector,
-               updatedAt:Date.now(), synced:false};
-  const i = records.findIndex(x=>x.room===rec.room);
-  if(i>=0) records[i]=rec; else records.push(rec);
-  persist();
-  queue({action:"upsert", records:[rec]});
-  toast(v.s==="PASS" ? `${rec.room} ผ่าน — ไปห้องถัดไป` : `${rec.room} มีปัญหา ${v.n} จุด`);
-  if(unit<12){ unit++; } else if(floor<20){ floor++; unit=1; }
-  loadRoom();
-};
-
-/* ---------- tabs ---------- */
-const VIEWS = [["tabCheck","viewCheck"],["tabSum","viewSum"],["tabList","viewList"]];
-function tab(id){
-  VIEWS.forEach(([t,v])=>{
-    document.getElementById(t).setAttribute("aria-selected", t===id);
-    document.getElementById(v).classList.toggle("hide", t!==id);
-  });
-  document.querySelector(".foot").classList.toggle("hide", id!=="tabCheck");
-  window.scrollTo(0,0);
-}
-VIEWS.forEach(([t])=>document.getElementById(t).onclick = ()=>tab(t));
-
-function goRoom(n){ floor = Math.floor(n/100); unit = n%100; tab("tabCheck"); loadRoom(); }
-document.getElementById("recs").onclick = e=>{
-  const r = e.target.closest(".rec"); if(r) goRoom(+r.dataset.r); };
-document.getElementById("cats").onclick = e=>{
-  const c = e.target.closest(".rchip"); if(c) goRoom(+c.dataset.r); };
-
-/* ---------- export ---------- */
-const HEAD = ["วันที่ตรวจ","ชั้น","Room No.","Room type","Brand","close sheer","close curtain",
-  "open sheer","open curtain","switch sheer","switch curtain","manual sheer","manual curtain",
-  "sound sheer","sound curtain","smooth all","ผลตรวจ","รายละเอียด defect / หมายเหตุ","ผู้ตรวจ"];
-function rows(){
-  return [...records].sort((a,b)=>a.room-b.room).map(r=>[
-    r.date, r.floor, r.room, r.type, r.brand,
-    ...KEYS.map(k=>r.checks[k]||""), r.result, r.note||"", r.by||""
-  ]);
-}
-document.getElementById("dl").onclick = ()=>{
-  if(!records.length) return toast("ยังไม่มีข้อมูลให้ส่งออก");
-  const csv = [HEAD, ...rows()].map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
-  const url = URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));
-  const a = document.createElement("a");
-  a.href=url; a.download=`curtain_check_${today().replace(/\//g,"-")}.csv`; a.click();
-  URL.revokeObjectURL(url); toast("ดาวน์โหลดแล้ว");
-};
-document.getElementById("cp").onclick = async ()=>{
-  if(!records.length) return toast("ยังไม่มีข้อมูลให้คัดลอก");
-  const tsv = rows().map(r=>r.join("\t")).join("\n");
-  try{ await navigator.clipboard.writeText(tsv); toast("คัดลอกแล้ว — วางในชีตได้เลย"); }
-  catch(e){ toast("คัดลอกไม่สำเร็จ ใช้ปุ่มดาวน์โหลด CSV แทน"); }
-};
-document.getElementById("clr").onclick = ()=>{
-  if(!confirm(cfg.url ? "ล้างข้อมูลในเครื่องนี้?\n(ข้อมูลในชีตยังอยู่ครบ — กด “ดึงจากชีต” เอากลับมาได้)"
-                      : "ลบข้อมูลที่บันทึกไว้ทั้งหมด?")) return;
-  records = []; persist(); loadRoom();
-  toast(cfg.url ? "ล้างในเครื่องแล้ว — ชีตไม่ถูกแตะ" : "ล้างข้อมูลแล้ว");
-};
-document.getElementById("push").onclick = ()=>{
-  if(!cfg.url) return openCfg();
-  if(!records.length) return toast("ยังไม่มีข้อมูลให้ส่ง");
-  queue({action:"upsert", records});
-  toast("กำลังส่ง "+records.length+" ห้องขึ้นชีต");
-};
-document.getElementById("pullBtn").onclick = async ()=>{
-  if(!cfg.url) return openCfg();
-  await pull(true);
-  toast(syncState==="ok" ? "ดึงข้อมูลจากชีตแล้ว" : "ดึงไม่สำเร็จ: "+syncMsg);
-};
-
-document.getElementById("lockNow").onclick = ()=>{ openLock(); window.scrollTo(0,0); };
-
-/* ---------- init ---------- */
-async function startSync(){
-  if(!cfg.url || !unlocked) return;
-  startPolling();
-  await flush();
-  await pull(true);
-}
-(async()=>{
-  loadCfg(); loadOutbox();
-  await load();
-  document.getElementById("inspector").value = inspector;
-  loadRoom();
+  index();
+  bindWho("who","dt","dtNote");
+  bindWho("who2","dt2","dtNote2");
   setSync(cfg.url ? "busy" : "off");
-  await gate();
+  go("home");
+  gate();
 })();
 </script>
+</body>
+</html>
