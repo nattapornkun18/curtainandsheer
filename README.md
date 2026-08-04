@@ -1,10 +1,10 @@
-# curtainandsheer — ย้ายไปรวมที่ roomcheck แล้ว
+# curtainandsheer — ย้ายไปรวมที่ nativeroomcheck แล้ว
 
 หน้าเช็คม่านของ repo นี้ถูกยุบไปรวมกับหน้าเช็คซิลิโคนเป็นเว็บเดียว
 ม่านกลายเป็นหนึ่งหมวดในนั้น (เลือกหมวด → เลือกห้อง → เช็ก)
 
-- **เว็บตัวจริง** https://nattapornkun18.github.io/roomcheck/
-- **โค้ดกับวิธีติดตั้ง** https://github.com/nattapornkun18/roomcheck
+- **เว็บตัวจริง** https://nattapornkun18.github.io/nativeroomcheck/
+- **โค้ดกับวิธีติดตั้ง** https://github.com/nattapornkun18/nativeroomcheck
 
 repo นี้เหลือแค่ `index.html` หน้าเดียวที่เด้งไปที่ใหม่ ไม่เก็บสำเนาโค้ดไว้แล้ว
 จะได้ไม่ต้องแก้สองที่ทุกครั้งแล้วเผลอปล่อยให้สองอันเพี้ยนกัน
